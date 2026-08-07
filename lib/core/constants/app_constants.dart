@@ -6,7 +6,8 @@ class AppConstants {
       'AQ.' 'Ab8RN6JBFIQzloMH9MOLd8RJ3XmqKFf0V_dmrrXON2hN72lnjQ';
   static const String geminiBaseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
-  static const String geminiModel = 'gemini-flash-latest';
+  static const String geminiModel = 'gemini-3.6-flash';
+
 
   // App
   static const String appName = 'FarmSense';

@@ -6,37 +6,8 @@ import '../widgets/feature_button.dart';
 import '../widgets/glass_card.dart';
 import 'soil_analysis_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  // Single lightweight controller for the pulse — no blob painter needed
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-    _pulseAnimation = CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,17 +15,8 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: AppColors.bgTop,
       body: Stack(
         children: [
-          // ── Static gradient background (no CustomPainter, no GPU blobs) ────
+          // ── Soft mist background ────
           const _StaticBackground(),
-
-          // ── Single lightweight animated accent orb — Positioned directly in Stack ────
-          Positioned(
-            top: 120,
-            right: -30,
-            child: RepaintBoundary(
-              child: _AnimatedOrb(animation: _pulseAnimation),
-            ),
-          ),
 
           // ── Main content ──────────────────────────────────────────────────
           SafeArea(
@@ -62,38 +24,39 @@ class _HomeScreenState extends State<HomeScreen>
               physics: const BouncingScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(child: _buildAppBar(context)),
-                SliverToBoxAdapter(child: _buildWelcomeBanner(context)),
+                SliverToBoxAdapter(child: _buildHeroBanner(context)),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
                     child: Text(
-                      'Farm Intelligence',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      'Quick Actions',
+                      style: GoogleFonts.poppins(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     )
                         .animate()
-                        .fadeIn(delay: 350.ms, duration: 450.ms)
-                        .slideX(begin: -0.08, end: 0, delay: 350.ms),
+                        .fadeIn(delay: 250.ms, duration: 400.ms)
+                        .slideX(begin: -0.05, end: 0, delay: 250.ms),
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                   sliver: SliverGrid(
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
-                      childAspectRatio: 0.85,
+                      childAspectRatio: 0.95,
                     ),
                     delegate: SliverChildListDelegate(
                       _featureCards(context),
                     ),
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                const SliverToBoxAdapter(child: SizedBox(height: 36)),
               ],
             ),
           ),
@@ -102,155 +65,171 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─── App Bar ──────────────────────────────────────────────────────────────
+  // ─── App Bar (Matching First page.jpg) ────────────────────────────────────
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.leafGreen, AppColors.forestGreen],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          // Left: App Logo & Name (Megha style)
+          Row(
+            children: [
+              const Icon(
+                Icons.eco_rounded,
+                color: AppColors.leafGreen,
+                size: 28,
               ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.leafGreen.withValues(alpha: 0.35),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+              const SizedBox(width: 8),
+              Text(
+                'Megha',
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.4,
                 ),
-              ],
-            ),
-            child: const Icon(Icons.eco_rounded, color: Colors.white, size: 24),
-          )
-              .animate()
-              .fadeIn(duration: 500.ms)
-              .scaleXY(begin: 0.7, end: 1.0, curve: Curves.elasticOut),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'FarmSense',
-                  style: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Text(
-                  'Smart Farming Assistant',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-          ),
-          // Notification chip
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15),
               ),
-            ),
-            child: const Icon(
-              Icons.notifications_none_rounded,
-              color: AppColors.textSecondary,
-              size: 22,
-            ),
-          ).animate().fadeIn(delay: 200.ms),
+            ],
+          ).animate().fadeIn(duration: 400.ms),
+
+          // Right action button: (👤)
+          Row(
+            children: [
+              _buildIconButton(
+                icon: Icons.person_outline_rounded,
+                onTap: () {},
+              ),
+            ],
+          ).animate().fadeIn(delay: 150.ms),
+
         ],
       ),
     );
   }
 
-  // ─── Welcome Banner ───────────────────────────────────────────────────────
+  Widget _buildIconButton({required IconData icon, required VoidCallback onTap}) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.leafGreen.withValues(alpha: 0.12),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Icon(
+        icon,
+        color: AppColors.leafGreen,
+        size: 22,
+      ),
+    );
+  }
 
-  Widget _buildWelcomeBanner(BuildContext context) {
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Good Morning'
-        : hour < 17
-            ? 'Good Afternoon'
-            : 'Good Evening';
+  // ─── Hero Banner ("Meet Megha AI") ─────────────────────────────────────
 
+  Widget _buildHeroBanner(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
       child: RepaintBoundary(
         child: GlassCard(
-          // No blur — pure gradient card, zero GPU compositing layer cost
-          gradient: const LinearGradient(
-            colors: [Color(0x3052B788), Color(0x1540916C)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderOpacity: 0.28,
-          padding: const EdgeInsets.all(22),
+          tint: AppColors.cardCream,
+          borderOpacity: 0.25,
+
+          padding: const EdgeInsets.all(20),
           child: Row(
             children: [
+              // Left: 3D Farmer Avatar Illustration
+              Container(
+                width: 95,
+                height: 110,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F6F3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Center(
+                  child: Text('👨‍🌾', style: TextStyle(fontSize: 54)),
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Right: Text Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$greeting, Farmer! 👨‍🌾',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                      'Meet Megha AI',
+                      style: GoogleFonts.poppins(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.leafGreen,
+                      ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
-                      'Analyze your soil, monitor crops,\nand grow smarter with AI.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
-                            height: 1.5,
+                      'Your personal\nagricultural assist...',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SoilAnalysisScreen()),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Tap to start',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.leafGreen,
+                            ),
                           ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 14,
+                            color: AppColors.leafGreen,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 16),
-              // Simple non-animated emoji — saves a controller
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (_, child) => Transform.scale(
-                  scale: 1.0 + _pulseAnimation.value * 0.06,
-                  child: child,
-                ),
-                child: const Text('🌾', style: TextStyle(fontSize: 58)),
               ),
             ],
           ),
         ),
       )
           .animate()
-          .fadeIn(delay: 200.ms, duration: 550.ms)
-          .slideY(begin: 0.15, end: 0, delay: 200.ms, curve: Curves.easeOut),
+          .fadeIn(delay: 150.ms, duration: 450.ms)
+          .slideY(begin: 0.1, end: 0, delay: 150.ms, curve: Curves.easeOut),
     );
   }
 
-  // ─── Feature Cards ────────────────────────────────────────────────────────
+  // ─── Quick Actions Feature Cards ─────────────────────────────────────────
 
   List<Widget> _featureCards(BuildContext context) {
     return [
       FeatureButton(
-        icon: Icons.landscape_rounded,
-        label: 'Soil Data',
-        subtitle: 'Upload report & analyze nutrients with AI',
-        color: AppColors.accentGold,
+        icon: Icons.description_outlined,
+        label: 'Soil Report',
+        subtitle: 'Upload & analyze report',
         delay: 0.ms,
         onTap: () => Navigator.push(
           context,
@@ -258,135 +237,96 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
       FeatureButton(
-        icon: Icons.wb_sunny_rounded,
-        label: 'Weather',
-        subtitle: 'Real-time forecast & irrigation advice',
-        color: const Color(0xFF3498DB),
-        delay: 80.ms,
+        icon: Icons.sensors_rounded,
+        label: 'Real Time\nData',
+        subtitle: 'Live sensors & climate',
+        delay: 60.ms,
         isComingSoon: true,
         onTap: () {},
       ),
       FeatureButton(
-        icon: Icons.bug_report_rounded,
-        label: 'Crop Disease',
-        subtitle: 'Detect pests & diseases from photos',
-        color: const Color(0xFFE74C3C),
-        delay: 160.ms,
-        isComingSoon: true,
-        onTap: () {},
-      ),
-      FeatureButton(
-        icon: Icons.trending_up_rounded,
-        label: 'Market Price',
-        subtitle: 'Live mandi rates & price predictions',
-        color: AppColors.leafGreen,
-        delay: 240.ms,
-        isComingSoon: true,
-        onTap: () {},
-      ),
-      FeatureButton(
-        icon: Icons.water_drop_rounded,
-        label: 'Irrigation',
-        subtitle: 'Smart water scheduling & alerts',
-        color: const Color(0xFF9B59B6),
-        delay: 320.ms,
+        icon: Icons.grass_rounded,
+        label: 'Crop\nRecommendation',
+        subtitle: 'AI crop advisory',
+        delay: 120.ms,
         isComingSoon: true,
         onTap: () {},
       ),
       FeatureButton(
         icon: Icons.agriculture_rounded,
-        label: 'Crop Planner',
-        subtitle: 'AI-powered crop rotation & yield forecast',
-        color: const Color(0xFF1ABC9C),
-        delay: 400.ms,
+        label: 'My Farms',
+        subtitle: 'Managed farm fields',
+        delay: 180.ms,
+        isComingSoon: true,
+        onTap: () {},
+      ),
+      FeatureButton(
+        icon: Icons.bug_report_outlined,
+        label: 'Plant Disease\nDetection',
+        subtitle: 'Detect leaf diseases & pests',
+        delay: 240.ms,
+        isComingSoon: true,
+        onTap: () {},
+      ),
+      FeatureButton(
+        icon: Icons.store_rounded,
+        label: 'Mandi',
+        subtitle: 'Live prices & market rates',
+        delay: 300.ms,
         isComingSoon: true,
         onTap: () {},
       ),
     ];
   }
+
 }
 
 // ─── Static Background ────────────────────────────────────────────────────────
-// Pure Container — zero GPU paint overhead
 
 class _StaticBackground extends StatelessWidget {
   const _StaticBackground();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF0D2B1A),
-            Color(0xFF1A3D2B),
-            Color(0xFF0F2318),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: [0.0, 0.55, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Static accent orb top-left — no animation
-          Positioned(
-            top: -80,
-            left: -60,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.accentGold.withValues(alpha: 0.07),
-              ),
-            ),
-          ),
-          // Static orb bottom-right
-          Positioned(
-            bottom: -100,
-            right: -80,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.leafGreen.withValues(alpha: 0.08),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Single Animated Orb ──────────────────────────────────────────────────────
-// Only ONE animation running — isolated in RepaintBoundary
-
-class _AnimatedOrb extends StatelessWidget {
-  const _AnimatedOrb({required this.animation});
-
-  final Animation<double> animation;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) => Transform.translate(
-        offset: Offset(animation.value * 10, animation.value * 20),
-        child: Opacity(
-          opacity: 0.06 + animation.value * 0.04,
+    return Stack(
+      children: [
+        Container(color: AppColors.bgTop),
+        // Soft liquid organic Orbs behind cards to enable backdrop blur glassmorphism
+        Positioned(
+          top: 60,
+          left: -40,
           child: Container(
-            width: 200,
-            height: 200,
-            decoration: const BoxDecoration(
+            width: 260,
+            height: 260,
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.forestGreen,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.leafGreen.withValues(alpha: 0.14),
+                  Colors.transparent,
+                ],
+              ),
             ),
           ),
         ),
-      ),
+        Positioned(
+          bottom: 80,
+          right: -50,
+          child: Container(
+            width: 320,
+            height: 320,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  const Color(0xFF40916C).withValues(alpha: 0.12),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -3,97 +3,113 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// ─── Farmer Palette ───────────────────────────────────────────────────────────
+// ─── Leafloom / FarmSense Palette (Derived from First page.jpg) ───────────────
 class AppColors {
   AppColors._();
 
-  // Background gradients — deep earthy greens
-  static const Color bgTop = Color(0xFF0D2B1A);
-  static const Color bgMid = Color(0xFF1B4332);
-  static const Color bgBottom = Color(0xFF0A1F14);
+  // Background — ultra soft off-white mist
+  static const Color bgTop = Color(0xFFF7F8FA);
+  static const Color bgMid = Color(0xFFF7F8FA);
+  static const Color bgBottom = Color(0xFFF7F8FA);
+
+  // Cards / Containers Fill — translucent glass white
+  static const Color cardCream = Color(0xD9FFFFFF); // 85% white glass
+  static const Color cardCreamDark = Color(0xB3F7F9F7); // 70% soft mist glass
+
+  // Card / Mini Div Border Color — Change this to update all card border colors!
+  static const Color cardBorderColor = Color.fromARGB(255, 3, 166, 87);
 
   // Accent
-  static const Color accentGold = Color(0xFFD4A017);
-  static const Color accentGoldLight = Color(0xFFF4D03F);
-  static const Color accentBrown = Color(0xFF8B5E3C);
+  static const Color accentGold = Color(0xFFD48806);
+  static const Color accentGoldLight = Color(0xFFB37400);
 
-  // Green shades
-  static const Color leafGreen = Color(0xFF52B788);
-  static const Color sageGreen = Color(0xFFA8D5B5);
-  static const Color darkGreen = Color(0xFF2D6A4F);
-  static const Color forestGreen = Color(0xFF40916C);
+  // Leafloom Green Shades
+  static const Color leafGreen = Color.fromARGB(255, 3, 166, 87);
+  static const Color brightGreen = Color.fromARGB(255, 240, 242, 241);
+  static const Color glowGreen = Color.fromARGB(255, 73, 239, 156);
+  static const Color sageGreen = Color.fromARGB(255, 246, 246, 246);
+  static const Color darkGreen = Color.fromARGB(255, 254, 255, 255);
+  static const Color forestGreen = Color.fromARGB(255, 239, 241, 240);
 
-  // Text
-  static const Color textPrimary = Color(0xFFF5F0E8);
-  static const Color textSecondary = Color(0xFFA8D5B5);
-  static const Color textMuted = Color(0xFF6B9E82);
+  // Text Colors
+  static const Color textPrimary = Color(
+    0xFF1E4D2B,
+  ); // Deep forest green heading
+  static const Color textSecondary = Color(0xFF2B5532);
+  static const Color textMuted = Color(0xFF628269);
 
-  // Glass
-  static const Color glassWhite = Color(0x26FFFFFF); // 15%
-  static const Color glassBorder = Color(0x40FFFFFF); // 25%
-  static const Color glassDark = Color(0x1A000000);
+  // Glass & Shadows
+  static const Color glassWhite = Color(0xD9FFFFFF);
+  static const Color glassBorder = Color(0x40236B3B); // 25% green tint border
+
+  // Pre-allocated static shadow instances for zero garbage collection during scrolling
+  static const List<BoxShadow> glassShadows = [
+    BoxShadow(color: Color(0x0D111126), blurRadius: 22, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x1403A657), blurRadius: 16, offset: Offset(0, 4)),
+  ];
 
   // Nutrient health colors
-  static const Color nutrientLow = Color(0xFFE74C3C);
-  static const Color nutrientMedium = Color(0xFFF39C12);
-  static const Color nutrientHigh = Color(0xFF27AE60);
-  static const Color nutrientUnknown = Color(0xFF95A5A6);
+  static const Color nutrientLow = Color(0xFFD9381E);
+  static const Color nutrientMedium = Color(0xFFD97706);
+  static const Color nutrientHigh = Color(0xFF236B3B);
+  static const Color nutrientUnknown = Color(0xFF6B7280);
 
-  // Gradient list for animated background
+  // Gradient list for background
   static const List<Color> backgroundGradient = [
-    Color(0xFF0D2B1A),
-    Color(0xFF1B4332),
-    Color(0xFF2D6A4F),
-    Color(0xFF1B4332),
-    Color(0xFF0D2B1A),
+    Color(0xFFF7F8FA),
+    Color(0xFFF7F8FA),
+    Color(0xFFF7F8FA),
   ];
 }
 
-// ─── Glass Decoration ─────────────────────────────────────────────────────────
+// ─── Floating Liquid Glassmorphism Decoration ────────────────────────────────
 class GlassStyle {
   GlassStyle._();
 
   static BoxDecoration card({
     Color? tint,
-    double opacity = 0.15,
-    double borderRadius = 20,
-    double borderOpacity = 0.25,
+    double opacity = 0.85,
+    double borderRadius = 26,
+    Color? borderColor,
+    double borderWidth = 1.0,
   }) {
-    return BoxDecoration(
-      color: (tint ?? Colors.white).withValues(alpha: opacity),
-      borderRadius: BorderRadius.circular(borderRadius),
-      border: Border.all(
-        color: Colors.white.withValues(alpha: borderOpacity),
-        width: 1.5,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.18),
-          blurRadius: 16,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    );
-  }
+    final baseColor = tint ?? AppColors.cardCream;
 
-  static BoxDecoration accentCard({
-    required Color color,
-    double borderRadius = 16,
-  }) {
     return BoxDecoration(
       gradient: LinearGradient(
         colors: [
-          color.withValues(alpha: 0.25),
-          color.withValues(alpha: 0.1),
+          baseColor.withValues(alpha: opacity),
+          AppColors.cardCreamDark.withValues(alpha: opacity * 0.85),
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: color.withValues(alpha: 0.4),
-        width: 1.2,
+        color: borderColor ?? AppColors.cardBorderColor,
+        width: borderWidth,
       ),
+      boxShadow: AppColors.glassShadows,
+    );
+  }
+
+  static BoxDecoration accentCard({
+    required Color color,
+    double borderRadius = 26,
+    double borderWidth = 1.0,
+  }) {
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.9),
+          color.withValues(alpha: 0.08),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(color: AppColors.cardBorderColor, width: borderWidth),
+      boxShadow: AppColors.glassShadows,
     );
   }
 }
@@ -102,15 +118,19 @@ class GlassStyle {
 class AppTheme {
   AppTheme._();
 
+  static ThemeData get light => dark;
+  static ThemeData get theme => dark;
+
   static ThemeData get dark {
-    final base = ThemeData.dark(useMaterial3: true);
+    final base = ThemeData.light(useMaterial3: true);
+
     return base.copyWith(
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.leafGreen,
         secondary: AppColors.accentGold,
         surface: AppColors.bgMid,
-        onPrimary: AppColors.textPrimary,
-        onSecondary: Colors.black,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
         onSurface: AppColors.textPrimary,
       ),
       scaffoldBackgroundColor: AppColors.bgTop,
@@ -163,11 +183,11 @@ class AppTheme {
           letterSpacing: 0.5,
         ),
       ),
-      pageTransitionsTheme: PageTransitionsTheme(
+      pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: const CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
         },
       ),
     );
@@ -179,8 +199,8 @@ class GlassBlur extends StatelessWidget {
   const GlassBlur({
     super.key,
     required this.child,
-    this.sigmaX = 12,
-    this.sigmaY = 12,
+    this.sigmaX = 14,
+    this.sigmaY = 14,
   });
 
   final Widget child;

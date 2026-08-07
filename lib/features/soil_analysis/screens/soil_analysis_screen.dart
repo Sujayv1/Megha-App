@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/rose_three_loader.dart';
 import '../models/soil_data_model.dart';
+
 import '../services/gemini_service.dart';
 import '../services/soil_storage_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/upload_zone.dart';
 import '../widgets/soil_nutrient_card.dart';
+import '../widgets/analysis_progress_loader.dart';
 
 class SoilAnalysisScreen extends StatefulWidget {
   const SoilAnalysisScreen({super.key});
@@ -66,13 +69,16 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
     });
 
     try {
-      final result =
-          await GeminiService.instance.analyzeSoilReport(_selectedFile!);
+      final result = await GeminiService.instance.analyzeSoilReport(
+        _selectedFile!,
+      );
 
       // Save report locally to phone storage
       final fileName = _selectedFile!.path.split(Platform.pathSeparator).last;
-      final savedReport =
-          await SoilStorageService.instance.saveReport(result, fileName);
+      final savedReport = await SoilStorageService.instance.saveReport(
+        result,
+        fileName,
+      );
 
       await _loadSavedReports();
 
@@ -112,8 +118,9 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             content: const Text('Report deleted from phone.'),
             backgroundColor: AppColors.nutrientLow,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -138,8 +145,9 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             content: const Text('Report deleted from phone.'),
             backgroundColor: AppColors.nutrientLow,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -152,31 +160,35 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.bgMid,
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
-        title: Text('Delete Report?',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700)),
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        title: Text(
+          'Delete Report?',
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
         content: Text(
           'This will permanently delete this report from your phone storage.',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: AppColors.textSecondary),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textMuted)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.nutrientLow,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
@@ -186,51 +198,67 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
     );
   }
 
+  void _handleBackNavigation() {
+    if (_soilData != null || _isLoading || _errorMessage != null) {
+      setState(() {
+        _soilData = null;
+        _isLoading = false;
+        _errorMessage = null;
+        _selectedFile = null;
+        _currentReportId = null;
+      });
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgTop,
-      body: Stack(
-        children: [
-          // Background gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.bgTop, AppColors.bgMid, AppColors.bgBottom],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-          // Accent glow top-right
-          Positioned(
-            top: -60,
-            right: -40,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.accentGold.withValues(alpha: 0.07),
-              ),
-            ),
-          ),
+    final canGoDirectlyBackToHome =
+        _soilData == null && !_isLoading && _errorMessage == null;
 
-          SafeArea(
-            child: Column(
-              children: [
-                _buildAppBar(context),
-                Expanded(
-                  child: _isLoading
-                      ? _buildLoadingState()
-                      : _soilData != null
-                          ? _buildResultsState()
-                          : _buildUploadState(),
+    return PopScope(
+      canPop: canGoDirectlyBackToHome,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _handleBackNavigation();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.bgTop,
+        body: Stack(
+          children: [
+            // Background gradient
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.bgTop,
+                    AppColors.bgMid,
+                    AppColors.bgBottom,
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildAppBar(context),
+                  Expanded(
+                    child: _isLoading
+                        ? _buildLoadingState()
+                        : _soilData != null
+                        ? _buildResultsState()
+                        : _buildUploadState(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -238,20 +266,20 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
   // ─── App Bar ──────────────────────────────────────────────────────────────
 
   Widget _buildAppBar(BuildContext context) {
+    final isReportState = _soilData != null;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 20, 8),
       child: Row(
         children: [
           IconButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _handleBackNavigation,
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
               ),
               child: const Icon(
                 Icons.arrow_back_ios_new_rounded,
@@ -260,52 +288,45 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
               ),
             ),
           ),
+
           const SizedBox(width: 4),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Soil Analysis',
+                isReportState ? 'Report' : 'Soil Analysis',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               Text(
-                'AI-Powered Nutrient Detection',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
-                    ),
+                isReportState
+                    ? 'AI Soil Report Details'
+                    : 'AI-Powered Nutrient Detection',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
               ),
             ],
           ),
           const Spacer(),
-          if (_soilData != null)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _soilData = null;
-                  _selectedFile = null;
-                  _errorMessage = null;
-                  _currentReportId = null;
-                });
-              },
-              child: GlassCard(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                borderRadius: 12,
-                opacity: 0.12,
-                child: Row(
-                  children: [
-                    const Icon(Icons.add_rounded,
-                        size: 16, color: AppColors.leafGreen),
-                    const SizedBox(width: 4),
-                    Text(
-                      'New',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
+          if (isReportState && _currentReportId != null)
+            IconButton(
+              onPressed: _deleteCurrentReport,
+              tooltip: 'Delete Report',
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.nutrientLow.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.nutrientLow.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.nutrientLow,
+                  size: 18,
                 ),
               ),
             ),
@@ -325,45 +346,6 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Info banner
-          GlassCard(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.only(bottom: 20),
-            gradient: LinearGradient(
-              colors: [
-                AppColors.leafGreen.withValues(alpha: 0.15),
-                Colors.transparent,
-              ],
-            ),
-            borderOpacity: 0.2,
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.leafGreen.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.info_outline_rounded,
-                      color: AppColors.leafGreen, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Upload a soil lab report (image/PDF) and AI will analyze all nutrient data and save it to your phone.',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms)
-              .slideY(begin: -0.1, end: 0),
-
           // Upload zone
           UploadZone(
             onFilePicked: (file) => setState(() => _selectedFile = file),
@@ -386,8 +368,11 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
               borderOpacity: 0.3,
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: AppColors.nutrientLow, size: 20),
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.nutrientLow,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -402,20 +387,27 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
               ),
             ).animate().fadeIn().shake(),
 
-          // Analyze button
-          if (_selectedFile != null)
-            SizedBox(
-              width: double.infinity,
-              child: _AnalyzeButton(onPressed: _analyzeFile),
-            )
-                .animate()
-                .fadeIn(duration: 400.ms)
-                .slideY(begin: 0.3, end: 0, curve: Curves.easeOut),
+          const SizedBox(height: 16),
 
-          const SizedBox(height: 24),
-
-          // Tips
-          _buildTipsSection(textTheme),
+          // Always-visible Glassy Analyze Button
+          SizedBox(
+            width: double.infinity,
+            child: _AnalyzeButton(
+              hasFile: _selectedFile != null,
+              onPressed: () {
+                if (_selectedFile != null) {
+                  _analyzeFile();
+                } else {
+                  // Prompt user to pick file if none selected
+                  UploadZone.pickFileFromUser().then((file) {
+                    if (file != null && mounted) {
+                      setState(() => _selectedFile = file);
+                    }
+                  });
+                }
+              },
+            ),
+          ),
 
           // Saved Reports Section
           if (_savedReports.isNotEmpty) ...[
@@ -434,12 +426,22 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              '📂 Saved Soil Reports on Phone',
-              style: textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
+            Row(
+              children: [
+                const Icon(
+                  Icons.folder_open_rounded,
+                  color: AppColors.leafGreen,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Saved Soil Reports',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
             ),
             Text(
               '${_savedReports.length} saved',
@@ -449,8 +451,8 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
         ),
         const SizedBox(height: 12),
         ..._savedReports.map((report) {
-          final statusColor = switch (
-              report.soilData.overallFertilityStatus?.toLowerCase()) {
+          final statusColor = switch (report.soilData.overallFertilityStatus
+              ?.toLowerCase()) {
             'high' => AppColors.nutrientHigh,
             'medium' => AppColors.nutrientMedium,
             'low' => AppColors.nutrientLow,
@@ -470,8 +472,6 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
                   _currentReportId = report.id;
                 });
               },
-              opacity: 0.08,
-              borderOpacity: 0.2,
               child: Row(
                 children: [
                   Container(
@@ -480,8 +480,13 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
                       color: statusColor.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Text('🧪', style: TextStyle(fontSize: 18)),
+                    child: Icon(
+                      Icons.description_rounded,
+                      color: statusColor,
+                      size: 20,
+                    ),
                   ),
+
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -508,8 +513,11 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: AppColors.nutrientLow, size: 20),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.nutrientLow,
+                      size: 20,
+                    ),
                     onPressed: () => _deleteReportById(report.id),
                     tooltip: 'Delete report from phone',
                   ),
@@ -522,138 +530,10 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
     ).animate().fadeIn(duration: 400.ms);
   }
 
-  Widget _buildTipsSection(TextTheme textTheme) {
-    final tips = [
-      ('💾', 'Reports automatically save locally to your device'),
-      ('📄', 'Use clear, high-resolution photos of lab reports'),
-      ('💡', 'PDF reports from certified labs give best results'),
-    ];
-
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      opacity: 0.08,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Tips & Storage Info',
-            style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...tips.map((tip) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tip.$1, style: const TextStyle(fontSize: 16)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        tip.$2,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    ).animate(delay: 300.ms).fadeIn(duration: 500.ms);
-  }
-
   // ─── Loading State ────────────────────────────────────────────────────────
 
   Widget _buildLoadingState() {
-    final textTheme = Theme.of(context).textTheme;
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _loadingController,
-            builder: (context, child) {
-              return Transform.rotate(
-                angle: _loadingController.value * 6.28,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      colors: [
-                        AppColors.leafGreen.withValues(alpha: 0.1),
-                        AppColors.leafGreen,
-                        AppColors.accentGold,
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.leafGreen.withValues(alpha: 0.4),
-                        blurRadius: 30,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Container(
-                    margin: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: AppColors.bgMid,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: Text('🌱', style: TextStyle(fontSize: 36)),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'Analyzing Soil Report...',
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Gemini AI is extracting nutrient data\nand saving report locally',
-            style: textTheme.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(3, (i) {
-              return AnimatedBuilder(
-                animation: _loadingController,
-                builder: (context, child) {
-                  final progress = (_loadingController.value + i * 0.33) % 1.0;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.accentGold
-                          .withValues(alpha: 0.3 + progress * 0.7),
-                    ),
-                  );
-                },
-              );
-            }),
-          ),
-        ],
-      ),
-    );
+    return const AnalysisProgressLoader(isProcessing: true);
   }
 
   // ─── Results State ────────────────────────────────────────────────────────
@@ -668,11 +548,7 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Summary card
-          _buildSummaryCard(data, textTheme),
-          const SizedBox(height: 20),
-
-          // Tab toggle: Nutrients | Raw JSON
+          // Tab toggle: Nutrients & Details | Raw JSON
           _buildToggleRow(textTheme),
           const SizedBox(height: 16),
 
@@ -681,12 +557,24 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             if (data.primaryNutrients.isEmpty)
               _buildEmptyNutrients(textTheme)
             else
-              ...data.primaryNutrients.asMap().entries.map(
-                    (e) => SoilNutrientCard(
-                      entry: e.value,
-                      delay: (e.key * 80).ms,
-                    ),
-                  ),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.65,
+                ),
+
+                itemCount: data.primaryNutrients.length,
+                itemBuilder: (context, index) {
+                  return SoilNutrientCard(
+                    entry: data.primaryNutrients[index],
+                    delay: (index * 60).ms,
+                  );
+                },
+              ),
 
             // Recommendations
             if (data.recommendations.isNotEmpty)
@@ -704,147 +592,22 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
     );
   }
 
-  Widget _buildSummaryCard(SoilDataModel data, TextTheme textTheme) {
-    final statusColor = switch (data.overallFertilityStatus?.toLowerCase()) {
-      'high' => AppColors.nutrientHigh,
-      'medium' => AppColors.nutrientMedium,
-      'low' => AppColors.nutrientLow,
-      _ => AppColors.nutrientUnknown,
-    };
-
-    return GlassCard(
-      gradient: LinearGradient(
-        colors: [
-          statusColor.withValues(alpha: 0.2),
-          AppColors.darkGreen.withValues(alpha: 0.15),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderOpacity: 0.3,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text('🧪', style: TextStyle(fontSize: 24)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Soil Analysis Complete',
-                  style: textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.5)),
-                ),
-                child: Text(
-                  data.overallFertilityStatus ?? 'Extracted',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (data.reportSummary != null || data.notes != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              data.reportSummary ?? data.notes!,
-              style: textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          // Info chips
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _infoChip('💾 Saved on Phone', textTheme,
-                  bgColor: AppColors.leafGreen.withValues(alpha: 0.2)),
-              if (data.soilType != null) _infoChip('🌍 ${data.soilType}', textTheme),
-              if (data.sampleDate != null) _infoChip('📅 ${data.sampleDate}', textTheme),
-              if (data.labName != null) _infoChip('🏥 ${data.labName}', textTheme),
-              if (data.farmerName != null) _infoChip('👨‍🌾 ${data.farmerName}', textTheme),
-              if (data.fieldLocation != null) _infoChip('📍 ${data.fieldLocation}', textTheme),
-              _infoChip(
-                  '📊 ${data.primaryNutrients.length} nutrients detected', textTheme),
-              _infoChip(
-                  '⚡ ${data.rawMap.length} data fields', textTheme),
-            ],
-          ),
-          if (_currentReportId != null) ...[
-            const SizedBox(height: 14),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _deleteCurrentReport,
-                icon: const Icon(Icons.delete_outline_rounded,
-                    color: AppColors.nutrientLow, size: 18),
-                label: Text(
-                  'Delete Report from Phone',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.nutrientLow,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    )
-        .animate()
-        .fadeIn(duration: 500.ms)
-        .slideY(begin: 0.1, end: 0, curve: Curves.easeOut);
-  }
-
-  Widget _infoChip(String label, TextTheme textTheme, {Color? bgColor}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bgColor ?? Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-      ),
-      child: Text(
-        label,
-        style: textTheme.bodySmall?.copyWith(
-          color: AppColors.textSecondary,
-          fontSize: 11,
-        ),
-      ),
-    );
-  }
-
   Widget _buildToggleRow(TextTheme textTheme) {
     return GlassCard(
       padding: const EdgeInsets.all(4),
-      opacity: 0.08,
       borderRadius: 14,
       child: Row(
         children: [
           _toggleTab(
-            label: '📊  Nutrients & Details',
+            label: 'Nutrients & Details',
+            icon: Icons.analytics_rounded,
             isActive: !_showRawJson,
             onTap: () => setState(() => _showRawJson = false),
             textTheme: textTheme,
           ),
           _toggleTab(
-            label: '{ }  Raw JSON',
+            label: 'Raw JSON',
+            icon: Icons.code_rounded,
             isActive: _showRawJson,
             onTap: () => setState(() => _showRawJson = true),
             textTheme: textTheme,
@@ -856,6 +619,7 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
 
   Widget _toggleTab({
     required String label,
+    required IconData icon,
     required bool isActive,
     required VoidCallback onTap,
     required TextTheme textTheme,
@@ -868,22 +632,32 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isActive
-                ? AppColors.leafGreen.withValues(alpha: 0.3)
+                ? AppColors.leafGreen.withValues(alpha: 0.18)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(11),
             border: isActive
-                ? Border.all(
-                    color: AppColors.leafGreen.withValues(alpha: 0.4))
+                ? Border.all(color: AppColors.leafGreen.withValues(alpha: 0.35))
                 : null,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: textTheme.bodyMedium?.copyWith(
-              color: isActive ? AppColors.leafGreen : AppColors.textMuted,
-              fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-              fontSize: 13,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 17,
+                color: isActive ? AppColors.leafGreen : AppColors.textMuted,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: isActive ? AppColors.leafGreen : AppColors.textMuted,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -921,9 +695,21 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
-        Text(
-          '💡 Recommendations',
-          style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        Row(
+          children: [
+            const Icon(
+              Icons.tips_and_updates_rounded,
+              color: AppColors.accentGold,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Recommendations',
+              style: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         GlassCard(
@@ -976,7 +762,6 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             }).toList(),
           ),
         ),
-        const SizedBox(height: 8),
       ],
     ).animate(delay: 200.ms).fadeIn(duration: 400.ms);
   }
@@ -985,15 +770,26 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        Text(
-          '🔬 All Extracted Lab Parameters',
-          style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            const Icon(
+              Icons.science_rounded,
+              color: AppColors.leafGreen,
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'All Extracted Lab Parameters',
+              style: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         GlassCard(
           padding: const EdgeInsets.all(16),
-          opacity: 0.08,
           child: Column(
             children: data.otherNutrients.entries.map((e) {
               return Padding(
@@ -1044,8 +840,13 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
           children: [
             Text(
               'Extracted Document JSON',
-              style: textTheme.titleSmall?.copyWith(color: AppColors.textSecondary),
+              style: textTheme.titleSmall?.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
             ),
+
             GestureDetector(
               onTap: () {
                 Clipboard.setData(ClipboardData(text: data.rawJson));
@@ -1055,20 +856,25 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
                     backgroundColor: AppColors.forestGreen,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 );
               },
               child: GlassCard(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 borderRadius: 10,
-                opacity: 0.12,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.copy_rounded,
-                        size: 14, color: AppColors.textSecondary),
+                    const Icon(
+                      Icons.copy_rounded,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Copy JSON',
@@ -1086,8 +892,6 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
         const SizedBox(height: 10),
         GlassCard(
           padding: const EdgeInsets.all(16),
-          opacity: 0.05,
-          borderOpacity: 0.12,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SelectableText(
@@ -1095,7 +899,8 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
               style: const TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 13,
-                color: AppColors.sageGreen,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
                 height: 1.6,
               ),
             ),
@@ -1109,8 +914,10 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
 // ─── Analyze Button ───────────────────────────────────────────────────────────
 
 class _AnalyzeButton extends StatefulWidget {
-  const _AnalyzeButton({required this.onPressed});
+  const _AnalyzeButton({required this.onPressed, required this.hasFile});
+
   final VoidCallback onPressed;
+  final bool hasFile;
 
   @override
   State<_AnalyzeButton> createState() => _AnalyzeButtonState();
@@ -1127,42 +934,45 @@ class _AnalyzeButtonState extends State<_AnalyzeButton> {
       onTapCancel: () => setState(() => _pressed = false),
       onTap: widget.onPressed,
       child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
+        scale: _pressed ? 0.98 : 1.0,
         duration: const Duration(milliseconds: 150),
-        child: Container(
+        child: GlassCard(
           padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.leafGreen, AppColors.forestGreen],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.3),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.leafGreen.withValues(alpha: 0.4),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
+          borderRadius: 16,
+          gradient: LinearGradient(
+            colors: widget.hasFile
+                ? [
+                    AppColors.leafGreen.withValues(alpha: 0.35),
+                    AppColors.forestGreen.withValues(alpha: 0.25),
+                  ]
+                : [
+                    AppColors.leafGreen.withValues(alpha: 0.12),
+                    Colors.transparent,
+                  ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          borderOpacity: widget.hasFile ? 0.45 : 0.2,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.auto_awesome_rounded,
-                  color: Colors.white, size: 20),
-              const SizedBox(width: 10),
+              Icon(
+                Icons.analytics_rounded,
+                color: widget.hasFile
+                    ? AppColors.leafGreen
+                    : AppColors.textSecondary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
               Text(
-                'Analyze with Gemini AI',
+                'Analyze',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
+                  color: widget.hasFile
+                      ? AppColors.leafGreen
+                      : AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
               ),
             ],
           ),
