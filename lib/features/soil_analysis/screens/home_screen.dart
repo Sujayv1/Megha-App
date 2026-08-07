@@ -5,6 +5,9 @@ import '../../../core/theme/app_theme.dart';
 import '../widgets/feature_button.dart';
 import '../widgets/glass_card.dart';
 import 'soil_analysis_screen.dart';
+import '../../crop_recommendation/screens/crop_recommendation_screen.dart';
+import '../../my_farms/screens/my_farms_screen.dart';
+
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -249,17 +252,22 @@ class HomeScreen extends StatelessWidget {
         label: 'Crop\nRecommendation',
         subtitle: 'AI crop advisory',
         delay: 120.ms,
-        isComingSoon: true,
-        onTap: () {},
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CropRecommendationScreen()),
+        ),
       ),
       FeatureButton(
         icon: Icons.agriculture_rounded,
         label: 'My Farms',
         subtitle: 'Managed farm fields',
         delay: 180.ms,
-        isComingSoon: true,
-        onTap: () {},
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MyFarmsScreen()),
+        ),
       ),
+
       FeatureButton(
         icon: Icons.bug_report_outlined,
         label: 'Plant Disease\nDetection',

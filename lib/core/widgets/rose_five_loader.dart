@@ -1,0 +1,185 @@
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import '../theme/app_theme.dart';
+
+/// A 60/120 FPS custom painter loading widget rendering the mathematical 5-Petaled Rose curve:
+/// r(t) = (9.2 + 0.60s)(0.72 + 0.28s) cos(5t)
+/// x(t) = 50 + cos t · r(t) · 3.25
+/// y(t) = 50 + sin t · r(t) · 3.25
+///
+/// Uses an infinite continuous Ticker with Stopwatch for zero-jump, perfectly seamless looping.
+class RoseFiveLoader extends StatefulWidget {
+  const RoseFiveLoader({
+    super.key,
+    this.size = 180,
+    this.color,
+    this.glowColor,
+    this.particleCount = 78,
+  });
+
+  final double size;
+  final Color? color;
+  final Color? glowColor;
+  final int particleCount;
+
+  @override
+  State<RoseFiveLoader> createState() => _RoseFiveLoaderState();
+}
+
+class _RoseFiveLoaderState extends State<RoseFiveLoader>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  late final Stopwatch _stopwatch;
+
+  @override
+  void initState() {
+    super.initState();
+    _stopwatch = Stopwatch()..start();
+    _ticker = createTicker((_) {
+      if (mounted) setState(() {});
+    })
+      ..start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _stopwatch.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = widget.color ?? AppColors.leafGreen;
+    final activeGlow = widget.glowColor ?? AppColors.glowGreen;
+
+
+    return CustomPaint(
+      size: Size(widget.size, widget.size),
+      painter: _RoseFivePainter(
+        elapsedMs: _stopwatch.elapsedMilliseconds,
+        color: activeColor,
+        glowColor: activeGlow,
+        particleCount: widget.particleCount,
+      ),
+    );
+  }
+}
+
+class _RoseFivePainter extends CustomPainter {
+  _RoseFivePainter({
+    required this.elapsedMs,
+    required this.color,
+    required this.glowColor,
+    required this.particleCount,
+  });
+
+  final int elapsedMs;
+  final Color color;
+  final Color glowColor;
+  final int particleCount;
+
+  // Math constants matching JS specification for 5-Petal Rose Curve
+  static const double roseA = 9.2;
+  static const double roseABoost = 0.60;
+  static const double roseBreathBase = 0.72;
+  static const double roseBreathBoost = 0.28;
+  static const double roseK = 5.0;
+  static const double roseScale = 3.25;
+  static const double trailSpan = 0.32;
+  static const int rotationDurationMs = 28000;
+  static const int pulseDurationMs = 4600;
+  static const int durationMs = 5400;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleFactor = size.width / 100.0;
+    final center = Offset(size.width / 2, size.height / 2);
+
+    // Pulse detail scale
+    final pulseProgress = (elapsedMs % pulseDurationMs) / pulseDurationMs;
+    final pulseAngle = pulseProgress * math.pi * 2;
+    final detailScale = 0.52 + ((math.sin(pulseAngle + 0.55) + 1) / 2) * 0.48;
+
+    // Continuous rotation angle
+    final rotationAngle =
+        -((elapsedMs % rotationDurationMs) / rotationDurationMs) * math.pi * 2;
+
+    // Continuous animation progress along 5-petal rose curve
+    final animProgress = (elapsedMs % durationMs) / durationMs;
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(rotationAngle);
+    canvas.translate(-center.dx, -center.dy);
+
+    // 1. Draw 5-Petaled Rose background curve path
+    final path = Path();
+    const steps = 480;
+    for (int i = 0; i <= steps; i++) {
+      final p = _getPoint(i / steps, detailScale, scaleFactor);
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+
+    final curvePaint = Paint()
+      ..color = color.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5 * scaleFactor
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(path, curvePaint);
+
+    // 2. Draw 78 Trailing Particles along 5-Petal Rose curve
+    final particlePaint = Paint()..style = PaintingStyle.fill;
+
+    for (int i = particleCount - 1; i >= 0; i--) {
+      final tailOffset = i / (particleCount - 1);
+      final progress = _normalize(animProgress - tailOffset * trailSpan);
+      final point = _getPoint(progress, detailScale, scaleFactor);
+
+      final fade = math.pow(1 - tailOffset, 0.56).toDouble();
+      final radius = (0.9 + fade * 2.7) * scaleFactor;
+      final opacity = (0.04 + fade * 0.96).clamp(0.0, 1.0);
+
+      final particleColor = Color.lerp(
+        color.withValues(alpha: opacity),
+        glowColor.withValues(alpha: opacity),
+        fade,
+      )!;
+
+      particlePaint.color = particleColor;
+      canvas.drawCircle(point, radius, particlePaint);
+    }
+
+    canvas.restore();
+  }
+
+  Offset _getPoint(double progress, double detailScale, double scaleFactor) {
+    final t = progress * math.pi * 2;
+    final a = roseA + detailScale * roseABoost;
+    final r = a *
+        (roseBreathBase + detailScale * roseBreathBoost) *
+        math.cos(roseK * t);
+
+    final x = (50 + math.cos(t) * r * roseScale) * scaleFactor;
+    final y = (50 + math.sin(t) * r * roseScale) * scaleFactor;
+
+    return Offset(x, y);
+  }
+
+  double _normalize(double progress) {
+    return ((progress % 1.0) + 1.0) % 1.0;
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoseFivePainter oldDelegate) =>
+      oldDelegate.elapsedMs != elapsedMs ||
+      oldDelegate.color != color ||
+      oldDelegate.glowColor != glowColor;
+}

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/rose_three_loader.dart';
 import '../models/soil_data_model.dart';
+
 
 import '../services/gemini_service.dart';
 import '../services/soil_storage_service.dart';
@@ -113,8 +113,10 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
           _selectedFile = null;
           _currentReportId = null;
         });
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            duration: const Duration(seconds: 2, milliseconds: 500),
             content: const Text('Report deleted from phone.'),
             backgroundColor: AppColors.nutrientLow,
             behavior: SnackBarBehavior.floating,
@@ -123,6 +125,7 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             ),
           ),
         );
+
       }
     }
   }
@@ -140,8 +143,10 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             _currentReportId = null;
           });
         }
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            duration: const Duration(seconds: 2, milliseconds: 500),
             content: const Text('Report deleted from phone.'),
             backgroundColor: AppColors.nutrientLow,
             behavior: SnackBarBehavior.floating,
@@ -150,6 +155,7 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             ),
           ),
         );
+
       }
     }
   }
@@ -850,8 +856,10 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
             GestureDetector(
               onTap: () {
                 Clipboard.setData(ClipboardData(text: data.rawJson));
+                ScaffoldMessenger.of(context).clearSnackBars();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
+                    duration: const Duration(seconds: 2),
                     content: const Text('JSON copied to clipboard!'),
                     backgroundColor: AppColors.forestGreen,
                     behavior: SnackBarBehavior.floating,
@@ -861,6 +869,7 @@ class _SoilAnalysisScreenState extends State<SoilAnalysisScreen>
                   ),
                 );
               },
+
               child: GlassCard(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
