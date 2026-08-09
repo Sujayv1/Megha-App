@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/screens/login_screen.dart';
+import 'features/auth/services/auth_storage_service.dart';
 import 'features/soil_analysis/screens/home_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Lock to portrait for a consistent farmer dashboard UX
   SystemChrome.setPreferredOrientations([
@@ -18,11 +20,15 @@ void main() {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
-  runApp(const FarmSenseApp());
+
+  final isLoggedIn = await AuthStorageService.instance.isLoggedIn();
+
+  runApp(FarmSenseApp(isLoggedIn: isLoggedIn));
 }
 
 class FarmSenseApp extends StatelessWidget {
-  const FarmSenseApp({super.key});
+  final bool isLoggedIn;
+  const FarmSenseApp({super.key, required this.isLoggedIn});
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +36,7 @@ class FarmSenseApp extends StatelessWidget {
       title: 'FarmSense',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const HomeScreen(),
+      home: isLoggedIn ? const HomeScreen() : const LoginScreen(),
     );
   }
 }

@@ -7,6 +7,13 @@ import '../widgets/glass_card.dart';
 import 'soil_analysis_screen.dart';
 import '../../crop_recommendation/screens/crop_recommendation_screen.dart';
 import '../../my_farms/screens/my_farms_screen.dart';
+import '../../auth/screens/login_screen.dart';
+import '../../auth/services/auth_storage_service.dart';
+import '../../risk_analysis/screens/risk_analysis_screen.dart';
+import 'real_time_data_screen.dart';
+
+
+
 
 
 class HomeScreen extends StatelessWidget {
@@ -97,15 +104,63 @@ class HomeScreen extends StatelessWidget {
             ],
           ).animate().fadeIn(duration: 400.ms),
 
-          // Right action button: (👤)
+          // Right action button: Logout / Profile
           Row(
             children: [
               _buildIconButton(
-                icon: Icons.person_outline_rounded,
-                onTap: () {},
+                icon: Icons.logout_rounded,
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppColors.bgMid,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      title: const Text('Sign Out'),
+                      content: const Text(
+                        'Are you sure you want to sign out of FarmSense AI?',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.leafGreen,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await AuthStorageService.instance.logout();
+                            if (!context.mounted) return;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LoginScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Sign Out',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ],
           ).animate().fadeIn(delay: 150.ms),
+
 
         ],
       ),
@@ -244,9 +299,12 @@ class HomeScreen extends StatelessWidget {
         label: 'Real Time\nData',
         subtitle: 'Live sensors & climate',
         delay: 60.ms,
-        isComingSoon: true,
-        onTap: () {},
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const RealTimeDataScreen()),
+        ),
       ),
+
       FeatureButton(
         icon: Icons.grass_rounded,
         label: 'Crop\nRecommendation',
@@ -269,10 +327,20 @@ class HomeScreen extends StatelessWidget {
       ),
 
       FeatureButton(
+        icon: Icons.shield_outlined,
+        label: 'Risk\nAnalysis',
+        subtitle: 'Drought, flood & heat risks',
+        delay: 240.ms,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const RiskAnalysisScreen()),
+        ),
+      ),
+      FeatureButton(
         icon: Icons.bug_report_outlined,
         label: 'Plant Disease\nDetection',
         subtitle: 'Detect leaf diseases & pests',
-        delay: 240.ms,
+        delay: 300.ms,
         isComingSoon: true,
         onTap: () {},
       ),
@@ -280,12 +348,13 @@ class HomeScreen extends StatelessWidget {
         icon: Icons.store_rounded,
         label: 'Mandi',
         subtitle: 'Live prices & market rates',
-        delay: 300.ms,
+        delay: 360.ms,
         isComingSoon: true,
         onTap: () {},
       ),
     ];
   }
+
 
 }
 

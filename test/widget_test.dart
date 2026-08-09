@@ -4,7 +4,8 @@ import 'package:plant_project/main.dart';
 
 void main() {
   testWidgets('FarmSense app smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const FarmSenseApp());
+    await tester.pumpWidget(const FarmSenseApp(isLoggedIn: false));
+
     expect(find.text('FarmSense'), findsWidgets);
   });
 }
