@@ -7,8 +7,7 @@ import '../widgets/glass_card.dart';
 import 'soil_analysis_screen.dart';
 import '../../crop_recommendation/screens/crop_recommendation_screen.dart';
 import '../../my_farms/screens/my_farms_screen.dart';
-import '../../auth/screens/login_screen.dart';
-import '../../auth/services/auth_storage_service.dart';
+import '../../auth/screens/profile_screen.dart';
 import '../../risk_analysis/screens/risk_analysis_screen.dart';
 import 'real_time_data_screen.dart';
 
@@ -104,59 +103,12 @@ class HomeScreen extends StatelessWidget {
             ],
           ).animate().fadeIn(duration: 400.ms),
 
-          // Right action button: Logout / Profile
+          // Right action button: Profile
           Row(
             children: [
               _buildIconButton(
-                icon: Icons.logout_rounded,
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      backgroundColor: AppColors.bgMid,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      title: const Text('Sign Out'),
-                      content: const Text(
-                        'Are you sure you want to sign out of FarmSense AI?',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.leafGreen,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () async {
-                            Navigator.pop(ctx);
-                            await AuthStorageService.instance.logout();
-                            if (!context.mounted) return;
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'Sign Out',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                icon: Icons.person_rounded,
+                onTap: () => _navigateTo(context, const ProfileScreen()),
               ),
             ],
           ).animate().fadeIn(delay: 150.ms),
@@ -168,28 +120,32 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildIconButton({required IconData icon, required VoidCallback onTap}) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppColors.leafGreen.withValues(alpha: 0.12),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: AppColors.leafGreen.withValues(alpha: 0.12),
+            width: 1,
           ),
-        ],
-      ),
-      child: Icon(
-        icon,
-        color: AppColors.leafGreen,
-        size: 22,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Icon(
+          icon,
+          color: AppColors.leafGreen,
+          size: 22,
+        ),
       ),
     );
   }
@@ -207,17 +163,52 @@ class HomeScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Row(
             children: [
-              // Left: 3D Farmer Avatar Illustration
+              // Left: Animated Leaf GIF / Image Container
               Container(
                 width: 95,
                 height: 110,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF2F6F3),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFFF4F7F4),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: AppColors.leafGreen.withValues(alpha: 0.18),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: const Center(
-                  child: Text('👨‍🌾', style: TextStyle(fontSize: 54)),
-                ),
+                child: Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.asset(
+                      'assets/images/leaf.png',
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.contain,
+                      errorBuilder: (ctx, err, stack) => const Icon(
+                        Icons.eco_rounded,
+                        color: AppColors.leafGreen,
+                        size: 52,
+                      ),
+                    ),
+                  ),
+                )
+                    .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                    .scale(
+                      begin: const Offset(0.95, 0.95),
+                      end: const Offset(1.05, 1.05),
+                      duration: 1600.ms,
+                      curve: Curves.easeInOut,
+                    )
+                    .shimmer(
+                      delay: 2000.ms,
+                      duration: 1500.ms,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
               ),
               const SizedBox(width: 16),
               // Right: Text Content
@@ -229,13 +220,13 @@ class HomeScreen extends StatelessWidget {
                       'Meet Megha AI',
                       style: GoogleFonts.poppins(
                         fontSize: 17,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: AppColors.leafGreen,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Your personal\nagricultural assist...',
+                      'Your personal\nagricultural assistant',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: AppColors.textMuted,
@@ -280,6 +271,34 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  void _navigateTo(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curve = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curve,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.04, 0),
+                end: Offset.zero,
+              ).animate(curve),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // ─── Quick Actions Feature Cards ─────────────────────────────────────────
 
   List<Widget> _featureCards(BuildContext context) {
@@ -289,20 +308,14 @@ class HomeScreen extends StatelessWidget {
         label: 'Soil Report',
         subtitle: 'Upload & analyze report',
         delay: 0.ms,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SoilAnalysisScreen()),
-        ),
+        onTap: () => _navigateTo(context, const SoilAnalysisScreen()),
       ),
       FeatureButton(
         icon: Icons.sensors_rounded,
         label: 'Real Time\nData',
         subtitle: 'Live sensors & climate',
         delay: 60.ms,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const RealTimeDataScreen()),
-        ),
+        onTap: () => _navigateTo(context, const RealTimeDataScreen()),
       ),
 
       FeatureButton(
@@ -310,20 +323,14 @@ class HomeScreen extends StatelessWidget {
         label: 'Crop\nRecommendation',
         subtitle: 'AI crop advisory',
         delay: 120.ms,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CropRecommendationScreen()),
-        ),
+        onTap: () => _navigateTo(context, const CropRecommendationScreen()),
       ),
       FeatureButton(
         icon: Icons.agriculture_rounded,
         label: 'My Farms',
         subtitle: 'Managed farm fields',
         delay: 180.ms,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MyFarmsScreen()),
-        ),
+        onTap: () => _navigateTo(context, const MyFarmsScreen()),
       ),
 
       FeatureButton(
@@ -331,10 +338,7 @@ class HomeScreen extends StatelessWidget {
         label: 'Risk\nAnalysis',
         subtitle: 'Drought, flood & heat risks',
         delay: 240.ms,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const RiskAnalysisScreen()),
-        ),
+        onTap: () => _navigateTo(context, const RiskAnalysisScreen()),
       ),
       FeatureButton(
         icon: Icons.bug_report_outlined,
@@ -349,6 +353,14 @@ class HomeScreen extends StatelessWidget {
         label: 'Mandi',
         subtitle: 'Live prices & market rates',
         delay: 360.ms,
+        isComingSoon: true,
+        onTap: () {},
+      ),
+      FeatureButton(
+        icon: Icons.shopping_bag_outlined,
+        label: 'Merchandise',
+        subtitle: 'Farming tools & seeds',
+        delay: 420.ms,
         isComingSoon: true,
         onTap: () {},
       ),

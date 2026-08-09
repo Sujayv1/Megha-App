@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../crop_recommendation/models/crop_plan_model.dart';
 import '../../crop_recommendation/services/crop_recommendation_storage_service.dart';
@@ -39,36 +40,95 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
   Future<void> _deleteFarm(String farmId) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgMid,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-        ),
-        title: const Text('Remove Farm Field?'),
-        content: const Text(
-          'This will delete this cultivated farm record from your device.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textMuted),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.nutrientLow,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        child: GlassCard(
+          padding: const EdgeInsets.all(22),
+          borderRadius: 26,
+          opacity: 0.98,
+          tint: Colors.white,
+          borderColor: AppColors.leafGreen.withValues(alpha: 0.4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.nutrientLow.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.delete_forever_rounded,
+                      color: AppColors.nutrientLow,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Remove Farm Field?',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+              const SizedBox(height: 14),
+              Text(
+                'This will delete this cultivated farm record from your device.',
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFF334155),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.nutrientLow,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 11,
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: Text(
+                      'Remove',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
 
@@ -118,40 +178,94 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
     if (farm.isWindowExpired) {
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.bgMid,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-          ),
-          title: const Text('Cultivation Window Expired'),
-          content: const Text(
-            'The 30-day cultivation start window for this plan has expired. Please generate a new crop recommendation plan.',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.leafGreen,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+          child: GlassCard(
+            padding: const EdgeInsets.all(22),
+            borderRadius: 26,
+            opacity: 0.98,
+            tint: Colors.white,
+            borderColor: AppColors.leafGreen.withValues(alpha: 0.4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.leafGreen.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.hourglass_disabled_rounded,
+                        color: AppColors.leafGreen,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Window Expired',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const CropRecommendationScreen(),
+                const SizedBox(height: 14),
+                Text(
+                  'The 30-day cultivation start window for this plan has expired. Please generate a new crop recommendation plan.',
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFF334155),
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    height: 1.45,
                   ),
-                );
-              },
-              child: const Text(
-                'Make New Plan',
-                style: TextStyle(color: Colors.white),
-              ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.leafGreen,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 11,
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CropRecommendationScreen(),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        'Make New Plan',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       );
       return;
@@ -178,7 +292,7 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
         surface: AppColors.bgMid,
         onSurface: AppColors.textPrimary,
       ),
-      dialogBackgroundColor: AppColors.bgMid,
+      dialogTheme: const DialogThemeData(backgroundColor: AppColors.bgMid),
     );
 
     final pickedDate = await showDatePicker(
@@ -192,33 +306,34 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
       },
     );
 
-    if (pickedDate != null && context.mounted) {
-      final updatedFarm = await CultivationPlanningLoaderDialog.show(
-        context: context,
-        farm: farm,
-        startDate: pickedDate,
-      );
+    if (pickedDate == null || !context.mounted) return;
 
-      if (updatedFarm != null && context.mounted) {
-        await _loadFarms();
+    final updatedFarm = await CultivationPlanningLoaderDialog.show(
+      context: context,
+      farm: farm,
+      startDate: pickedDate,
+    );
 
-        Navigator.push(
-          context,
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 300),
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                CultivationStartScreen(
-              farm: updatedFarm,
-              startDate: pickedDate,
-            ),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-          ),
-        );
-      }
-    }
+    if (updatedFarm == null || !context.mounted) return;
+
+    await _loadFarms();
+    if (!context.mounted) return;
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            CultivationStartScreen(
+          farm: updatedFarm,
+          startDate: pickedDate,
+        ),
+        transitionsBuilder:
+            (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
   }
 
   @override
