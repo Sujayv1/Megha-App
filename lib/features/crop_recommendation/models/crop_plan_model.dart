@@ -225,6 +225,42 @@ class CropRecommendationResult {
   }
 }
 
+/// Model for a day-by-day cultivation timeline activity
+class CultivationTimelineItem {
+  final int dayOffset;
+  final String title;
+  final String actionIcon;
+  final String instructions;
+  bool isCompleted;
+
+  CultivationTimelineItem({
+    required this.dayOffset,
+    required this.title,
+    required this.actionIcon,
+    required this.instructions,
+    this.isCompleted = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'dayOffset': dayOffset,
+        'title': title,
+        'actionIcon': actionIcon,
+        'instructions': instructions,
+        'isCompleted': isCompleted,
+      };
+
+  factory CultivationTimelineItem.fromJson(Map<String, dynamic> json) {
+    return CultivationTimelineItem(
+      dayOffset: json['dayOffset'] as int? ?? 1,
+      title: json['title']?.toString() ?? 'Field Action',
+      actionIcon: json['actionIcon']?.toString() ?? '🌱',
+      instructions:
+          json['instructions']?.toString() ?? 'Perform required crop care step.',
+      isCompleted: json['isCompleted'] as bool? ?? false,
+    );
+  }
+}
+
 /// Model for an adopted farm saved under "My Farms"
 class SavedFarmModel {
   final String id;
@@ -232,6 +268,8 @@ class SavedFarmModel {
   final DateTime adoptedAt;
   final String location;
   final CropPlanModel cropPlan;
+  final DateTime? cultivationStartedAt;
+  final List<CultivationTimelineItem> timeline;
 
   SavedFarmModel({
     required this.id,
@@ -239,7 +277,57 @@ class SavedFarmModel {
     required this.adoptedAt,
     required this.location,
     required this.cropPlan,
+    this.cultivationStartedAt,
+    this.timeline = const [],
   });
+
+  bool get isCultivationStarted => cultivationStartedAt != null;
+
+  int get totalDurationDays {
+    final raw = cropPlan.durationDays;
+    final numbers = RegExp(r'\d+').allMatches(raw).map((m) => int.parse(m.group(0)!)).toList();
+    if (numbers.isEmpty) return 110;
+    if (numbers.length == 1) return numbers.first;
+    return ((numbers.first + numbers.last) / 2).round();
+  }
+
+  int get daysElapsed {
+    if (cultivationStartedAt == null) return 0;
+    final diff = DateTime.now().difference(cultivationStartedAt!).inDays + 1;
+    return diff.clamp(0, totalDurationDays);
+  }
+
+  double get progressRatio {
+    if (totalDurationDays == 0 || cultivationStartedAt == null) return 0.0;
+    return (daysElapsed / totalDurationDays).clamp(0.0, 1.0);
+  }
+
+  int get progressPercent => (progressRatio * 100).round();
+
+  DateTime get windowEndDate => adoptedAt.add(const Duration(days: 30));
+
+  bool get isWindowExpired =>
+      DateTime.now().isAfter(windowEndDate) && !isCultivationStarted;
+
+  int get daysRemainingInWindow {
+    final diff = windowEndDate.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff;
+  }
+
+  SavedFarmModel copyWith({
+    DateTime? cultivationStartedAt,
+    List<CultivationTimelineItem>? timeline,
+  }) {
+    return SavedFarmModel(
+      id: id,
+      farmName: farmName,
+      adoptedAt: adoptedAt,
+      location: location,
+      cropPlan: cropPlan,
+      cultivationStartedAt: cultivationStartedAt ?? this.cultivationStartedAt,
+      timeline: timeline ?? this.timeline,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -247,16 +335,30 @@ class SavedFarmModel {
         'adoptedAt': adoptedAt.toIso8601String(),
         'location': location,
         'cropPlan': cropPlan.toJson(),
+        'cultivationStartedAt': cultivationStartedAt?.toIso8601String(),
+        'timeline': timeline.map((e) => e.toJson()).toList(),
       };
 
   factory SavedFarmModel.fromJson(Map<String, dynamic> json) {
     return SavedFarmModel(
-      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id: json['id']?.toString() ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       farmName: json['farmName']?.toString() ?? 'My Field',
       adoptedAt: DateTime.tryParse(json['adoptedAt']?.toString() ?? '') ??
           DateTime.now(),
       location: json['location']?.toString() ?? 'Location',
-      cropPlan: CropPlanModel.fromJson(json['cropPlan'] as Map<String, dynamic>),
+      cropPlan:
+          CropPlanModel.fromJson(json['cropPlan'] as Map<String, dynamic>),
+      cultivationStartedAt:
+          DateTime.tryParse(json['cultivationStartedAt']?.toString() ?? ''),
+      timeline: (json['timeline'] as List<dynamic>?)
+              ?.map((item) =>
+                  CultivationTimelineItem.fromJson(item as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 }
+
+
+

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../soil_analysis/models/soil_data_model.dart';
+import '../../soil_analysis/services/soil_storage_service.dart';
 import '../models/crop_plan_model.dart';
+
 
 class CropRecommendationException implements Exception {
   final String message;
@@ -205,6 +207,31 @@ JSON SCHEMA:
 }
 ''';
 
+    final parsedMap = await _callGeminiApi(promptText);
+
+    final cropPlans = (parsedMap['cropPlans'] as List<dynamic>?)
+            ?.map((c) => CropPlanModel.fromJson(c as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    if (cropPlans.isEmpty) {
+      throw CropRecommendationException('Could not extract crop recommendations.');
+    }
+
+    return CropRecommendationResult(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      generatedAt: DateTime.now(),
+      state: state,
+      city: city,
+      soilType: soilType,
+      startMonth: startMonth,
+      soilReportName: soilReportName,
+      liveWeatherSummary: liveWeather,
+      cropPlans: cropPlans,
+    );
+  }
+
+  Future<Map<String, dynamic>> _callGeminiApi(String promptText) async {
     final requestBody = {
       'contents': [
         {
@@ -237,31 +264,11 @@ JSON SCHEMA:
       throw CropRecommendationException('API Error (${response.statusCode}): $errorMsg');
     }
 
-    final parsedMap = _parseResponse(response.body);
-
-    final cropPlans = (parsedMap['cropPlans'] as List<dynamic>?)
-            ?.map((c) => CropPlanModel.fromJson(c as Map<String, dynamic>))
-            .toList() ??
-        [];
-
-    if (cropPlans.isEmpty) {
-      throw CropRecommendationException('Could not extract crop recommendations.');
-    }
-
-    return CropRecommendationResult(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      generatedAt: DateTime.now(),
-      state: state,
-      city: city,
-      soilType: soilType,
-      startMonth: startMonth,
-      soilReportName: soilReportName,
-      liveWeatherSummary: liveWeather,
-      cropPlans: cropPlans,
-    );
+    return _parseResponse(response.body);
   }
 
   Map<String, dynamic> _parseResponse(String responseBody) {
+
     try {
       final json = jsonDecode(responseBody) as Map<String, dynamic>;
       final candidates = json['candidates'] as List<dynamic>?;
@@ -315,4 +322,135 @@ JSON SCHEMA:
       return body;
     }
   }
+
+  /// Generates a day-by-day precision agronomy timeline for an adopted crop plan.
+  Future<List<CultivationTimelineItem>> generateCultivationTimeline({
+    required CropPlanModel cropPlan,
+    required String location,
+    required DateTime startDate,
+    SavedSoilReport? soilReport,
+  }) async {
+    final formattedDate =
+        '${startDate.day}/${startDate.month}/${startDate.year}';
+    final soilSummary = soilReport == null
+        ? 'General regional soil'
+        : 'pH: ${soilReport.soilData.ph}, N: ${soilReport.soilData.nitrogenKgHa}, P: ${soilReport.soilData.phosphorusKgHa}, K: ${soilReport.soilData.potassiumKgHa}, Soil: ${soilReport.soilData.soilType}';
+
+    final prompt = '''
+
+You are an expert agronomist in India.
+Generate a simple, clear 7-stage cultivation timeline for a farmer growing:
+- Crop: ${cropPlan.cropName} (${cropPlan.durationDays})
+- Location: $location
+- Start Date: $formattedDate
+- Soil Test: $soilSummary
+
+INSTRUCTIONS:
+1. Provide EXACTLY 7 main chronological stages following Indian crop cycles:
+   Stage 1 (Day 1): Land Prep & Seed Selection
+   Stage 2 (Day 18): Sowing & Initial Water
+   Stage 3 (Day 30): Germination & Early Weeding
+   Stage 4 (Day 50): Vegetative Growth & Fertilizer Dose
+   Stage 5 (Day 75): Flowering & Pest Control
+   Stage 6 (Day 95): Fruit/Pod/Grain Development
+   Stage 7 (Day 115): Maturity, Harvest & Market
+2. For each step, specify:
+   - "dayOffset": Integer day number (1, 18, 30, 50, 75, 95, 115).
+   - "title": Concise stage name with day range (e.g. "Land Prep & Seeds (Day 0–15)").
+   - "actionIcon": Single Emoji (e.g. 🚜, 🌱, 💧, 🧪, 🌸, 🌿, 🌾).
+   - "instructions": 1 simple, clear, actionable sentence that any farmer can easily understand.
+3. Return ONLY a valid JSON object matching the schema below. No markdown fences.
+
+JSON SCHEMA:
+{
+  "timeline": [
+    {
+      "dayOffset": 1,
+      "title": "Land Prep & Seeds (Day 0–15)",
+      "actionIcon": "🚜",
+      "instructions": "Plough field, add compost manure, select quality seeds, and prepare beds."
+    }
+  ]
 }
+''';
+
+    try {
+      final jsonMap = await _callGeminiApi(prompt);
+      final rawList = jsonMap['timeline'] as List<dynamic>? ?? [];
+      final List<CultivationTimelineItem> result = [];
+
+      for (final item in rawList) {
+        if (item is Map) {
+          result.add(
+            CultivationTimelineItem.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+
+      if (result.isEmpty) {
+        return _fallbackTimeline(cropPlan);
+      }
+
+      result.sort((a, b) => a.dayOffset.compareTo(b.dayOffset));
+      return result;
+    } catch (_) {
+      return _fallbackTimeline(cropPlan);
+    }
+  }
+
+  List<CultivationTimelineItem> _fallbackTimeline(CropPlanModel plan) {
+    return [
+      CultivationTimelineItem(
+        dayOffset: 1,
+        title: 'Land Prep & Seeds (Day 0–15)',
+        actionIcon: '🚜',
+        instructions:
+            'Plough field, add compost manure, treat seeds, and prepare beds.',
+      ),
+      CultivationTimelineItem(
+        dayOffset: 18,
+        title: 'Sowing & Initial Water (Day 15–25)',
+        actionIcon: '🌱',
+        instructions:
+            'Sow seeds at correct depth and give initial light irrigation.',
+      ),
+      CultivationTimelineItem(
+        dayOffset: 30,
+        title: 'Germination & Weed Control (Day 25–45)',
+        actionIcon: '💧',
+        instructions:
+            'Check plant population, fill missing gaps, and clear early weeds.',
+      ),
+      CultivationTimelineItem(
+        dayOffset: 50,
+        title: 'Vegetative Growth & Fertilizer (Day 45–70)',
+        actionIcon: '🧪',
+        instructions:
+            'Apply scheduled N-P-K fertilizer dose and irrigate regularly.',
+      ),
+      CultivationTimelineItem(
+        dayOffset: 75,
+        title: 'Flowering & Pest Care (Day 70–90)',
+        actionIcon: '🌸',
+        instructions:
+            'Inspect crops for pests, maintain soil moisture, and protect flowers.',
+      ),
+      CultivationTimelineItem(
+        dayOffset: 95,
+        title: 'Fruit & Grain Growth (Day 90–110)',
+        actionIcon: '🌿',
+        instructions:
+            'Provide final nutrient support and monitor crop maturity.',
+      ),
+      CultivationTimelineItem(
+        dayOffset: 115,
+        title: 'Harvest & Market (Day 110–120+)',
+        actionIcon: '🌾',
+        instructions:
+            'Stop water 7 days before, harvest at maturity, dry, and sell in market.',
+      ),
+    ];
+  }
+}
+
+

@@ -98,4 +98,48 @@ class CropRecommendationStorageService {
     final encodedList = farms.map((f) => jsonEncode(f.toJson())).toList();
     await prefs.setStringList(_myFarmsKey, encodedList);
   }
+
+  /// Updates a farm's cultivation start date and generated timeline activities.
+  Future<SavedFarmModel?> updateFarmCultivation({
+    required String farmId,
+    required DateTime cultivationStartDate,
+    required List<CultivationTimelineItem> timeline,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final farms = await getMyFarms();
+    final index = farms.indexWhere((f) => f.id == farmId);
+    if (index == -1) return null;
+
+    final updatedFarm = farms[index].copyWith(
+      cultivationStartedAt: cultivationStartDate,
+      timeline: timeline,
+    );
+
+    farms[index] = updatedFarm;
+    final encodedList = farms.map((f) => jsonEncode(f.toJson())).toList();
+    await prefs.setStringList(_myFarmsKey, encodedList);
+
+    return updatedFarm;
+  }
+
+  /// Toggles a specific timeline task completed status.
+  Future<void> toggleTimelineItem({
+    required String farmId,
+    required int taskIndex,
+    required bool isCompleted,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final farms = await getMyFarms();
+    final index = farms.indexWhere((f) => f.id == farmId);
+    if (index == -1) return;
+
+    final farm = farms[index];
+    if (taskIndex < 0 || taskIndex >= farm.timeline.length) return;
+
+    farm.timeline[taskIndex].isCompleted = isCompleted;
+
+    final encodedList = farms.map((f) => jsonEncode(f.toJson())).toList();
+    await prefs.setStringList(_myFarmsKey, encodedList);
+  }
 }
+

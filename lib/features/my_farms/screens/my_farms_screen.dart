@@ -3,7 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../crop_recommendation/models/crop_plan_model.dart';
 import '../../crop_recommendation/services/crop_recommendation_storage_service.dart';
+import '../../crop_recommendation/screens/crop_recommendation_screen.dart';
 import '../../soil_analysis/widgets/glass_card.dart';
+import 'cultivation_start_screen.dart';
+import '../widgets/cultivation_planning_loader_dialog.dart';
+
 
 class MyFarmsScreen extends StatefulWidget {
   const MyFarmsScreen({super.key});
@@ -49,7 +53,10 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -82,7 +89,135 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
           ),
         );
       }
+    }
+  }
 
+  Future<void> _selectCultivationStartDate(
+
+    BuildContext context,
+    SavedFarmModel farm,
+  ) async {
+    if (farm.isCultivationStarted) {
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              CultivationStartScreen(
+            farm: farm,
+            startDate: farm.cultivationStartedAt!,
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+      );
+      return;
+    }
+
+    if (farm.isWindowExpired) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.bgMid,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+          ),
+          title: const Text('Cultivation Window Expired'),
+          content: const Text(
+            'The 30-day cultivation start window for this plan has expired. Please generate a new crop recommendation plan.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.leafGreen,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CropRecommendationScreen(),
+                  ),
+                );
+              },
+              child: const Text(
+                'Make New Plan',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final rawStart = farm.adoptedAt;
+    final startDate = DateTime(rawStart.year, rawStart.month, rawStart.day);
+    final endDate = startDate.add(const Duration(days: 30));
+
+    final rawNow = DateTime.now();
+    final today = DateTime(rawNow.year, rawNow.month, rawNow.day);
+
+    DateTime initialDate = today;
+    if (initialDate.isBefore(startDate)) {
+      initialDate = startDate;
+    } else if (initialDate.isAfter(endDate)) {
+      initialDate = endDate;
+    }
+
+    final darkDatePickerTheme = Theme.of(context).copyWith(
+      colorScheme: const ColorScheme.dark(
+        primary: AppColors.leafGreen,
+        onPrimary: Colors.white,
+        surface: AppColors.bgMid,
+        onSurface: AppColors.textPrimary,
+      ),
+      dialogBackgroundColor: AppColors.bgMid,
+    );
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: startDate,
+      lastDate: endDate,
+      helpText: 'SELECT START DATE (30-DAY WINDOW)',
+      builder: (ctx, child) {
+        return Theme(data: darkDatePickerTheme, child: child!);
+      },
+    );
+
+    if (pickedDate != null && context.mounted) {
+      final updatedFarm = await CultivationPlanningLoaderDialog.show(
+        context: context,
+        farm: farm,
+        startDate: pickedDate,
+      );
+
+      if (updatedFarm != null && context.mounted) {
+        await _loadFarms();
+
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            transitionDuration: const Duration(milliseconds: 300),
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                CultivationStartScreen(
+              farm: updatedFarm,
+              startDate: pickedDate,
+            ),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+          ),
+        );
+      }
     }
   }
 
@@ -117,8 +252,8 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                           ),
                         )
                       : _farms.isEmpty
-                          ? _buildEmptyState(textTheme)
-                          : _buildFarmsList(textTheme),
+                      ? _buildEmptyState(textTheme)
+                      : _buildFarmsList(textTheme),
                 ),
               ],
             ),
@@ -156,14 +291,14 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
               Text(
                 'My Farms',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               Text(
                 'Active Cultivated Farm Fields',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
               ),
             ],
           ),
@@ -245,8 +380,11 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                           ),
                           Row(
                             children: [
-                              const Icon(Icons.location_on_rounded,
-                                  size: 13, color: AppColors.leafGreen),
+                              const Icon(
+                                Icons.location_on_rounded,
+                                size: 13,
+                                color: AppColors.leafGreen,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 farm.location,
@@ -290,7 +428,10 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                         ),
                       ),
                       child: Center(
-                        child: Text(plan.cropIcon, style: const TextStyle(fontSize: 26)),
+                        child: Text(
+                          plan.cropIcon,
+                          style: const TextStyle(fontSize: 26),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -301,15 +442,32 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                           Text(
                             plan.cropName,
                             style: textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
+                              color: AppColors.leafGreen,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
                             ),
                           ),
-                          Text(
-                            'Duration: ${plan.durationDays}',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
+                          const SizedBox(height: 2),
+                          RichText(
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: 'Duration: ',
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.2,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: plan.durationDays,
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.2,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -339,15 +497,17 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                             Text(
                               'Investment',
                               style: textTheme.bodySmall?.copyWith(
-                                color: AppColors.textMuted,
-                                fontSize: 10,
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13.2,
                               ),
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               plan.estimatedInvestmentPerAcre,
                               style: textTheme.titleSmall?.copyWith(
                                 color: AppColors.accentGold,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 14,
                               ),
                             ),
@@ -370,17 +530,19 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Est. Profit',
+                              'Profit',
                               style: textTheme.bodySmall?.copyWith(
-                                color: AppColors.textMuted,
-                                fontSize: 10,
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13.2,
                               ),
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               plan.estimatedProfitPerAcre,
                               style: textTheme.titleSmall?.copyWith(
                                 color: AppColors.leafGreen,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 14,
                               ),
                             ),
@@ -391,32 +553,101 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 14),
+                // Active Cultivation Progress Bar on Card
+                if (farm.isCultivationStarted) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Cultivation Progress',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      Text(
+                        '${farm.progressPercent}% (Day ${farm.daysElapsed} of ${farm.totalDurationDays})',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: AppColors.leafGreen,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: farm.progressRatio,
+                      minHeight: 8,
+                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.leafGreen,
+                      ),
+                    ),
+                  ),
+                ],
 
-                // Fertilizer Plan Quick Summary
-                Text(
-                  '🧪 Fertilizer Plan',
-                  style: textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
+                const SizedBox(height: 16),
+
+                // Action Button: Start Cultivation or View Active Timeline
+                SizedBox(
+                  width: double.infinity,
+                  child: GestureDetector(
+                    onTap: () => _selectCultivationStartDate(context, farm),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: farm.isCultivationStarted
+                            ? AppColors.leafGreen.withValues(alpha: 0.22)
+                            : AppColors.leafGreen,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.leafGreen,
+                          width: 1.2,
+                        ),
+                        boxShadow: farm.isCultivationStarted
+                            ? []
+                            : [
+                                BoxShadow(
+                                  color: AppColors.leafGreen.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            farm.isCultivationStarted
+                                ? Icons.timeline_rounded
+                                : Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            farm.isCultivationStarted
+                                ? 'View Active Timeline'
+                                : 'Start Cultivation',
+                            style: textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 6),
-
-                ...plan.fertilizerSchedule.map((step) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '• ${step.stage}: ${step.recommendedDose}',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.textMuted,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }),
               ],
             ),
           ),
@@ -425,3 +656,4 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
     );
   }
 }
+
