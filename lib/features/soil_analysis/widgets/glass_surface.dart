@@ -79,7 +79,19 @@ class GlassSurface extends StatelessWidget {
       surface = GestureDetector(onTap: onTap, child: surface);
     }
 
-    // Isolated inside RepaintBoundary & ClipRRect for 60/120 FPS performance
+    if (blur <= 0) {
+      return Container(
+        margin: margin,
+        child: RepaintBoundary(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: surface,
+          ),
+        ),
+      );
+    }
+
+    // Isolated inside RepaintBoundary & ClipRRect for 60/120 FPS GPU performance
     return Container(
       margin: margin,
       child: RepaintBoundary(

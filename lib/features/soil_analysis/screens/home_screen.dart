@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/navigation/navigation_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/feature_button.dart';
 import '../widgets/glass_card.dart';
@@ -8,6 +9,7 @@ import 'soil_analysis_screen.dart';
 import '../../crop_recommendation/screens/crop_recommendation_screen.dart';
 import '../../my_farms/screens/my_farms_screen.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../mandi/screens/mandi_screen.dart';
 import '../../risk_analysis/screens/risk_analysis_screen.dart';
 import 'real_time_data_screen.dart';
 
@@ -85,10 +87,18 @@ class HomeScreen extends StatelessWidget {
           // Left: App Logo & Name (Megha style)
           Row(
             children: [
-              const Icon(
-                Icons.eco_rounded,
-                color: AppColors.leafGreen,
-                size: 28,
+              RepaintBoundary(
+                child: Image.asset(
+                  'assets/images/leaf.png',
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.contain,
+                  errorBuilder: (ctx, err, stack) => const Icon(
+                    Icons.eco_rounded,
+                    color: AppColors.leafGreen,
+                    size: 28,
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -163,52 +173,25 @@ class HomeScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Row(
             children: [
-              // Left: Animated Leaf GIF / Image Container
+              // Left Media Slot (Reserved for future GIF / Video)
               Container(
                 width: 95,
                 height: 110,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF4F7F4),
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
                     color: AppColors.leafGreen.withValues(alpha: 0.18),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
                 ),
                 child: Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.asset(
-                      'assets/images/leaf.png',
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.contain,
-                      errorBuilder: (ctx, err, stack) => const Icon(
-                        Icons.eco_rounded,
-                        color: AppColors.leafGreen,
-                        size: 52,
-                      ),
-                    ),
+                  child: Image.asset(
+                    'assets/images/leaf.png',
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.contain,
+                    errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
                   ),
-                )
-                    .animate(onPlay: (controller) => controller.repeat(reverse: true))
-                    .scale(
-                      begin: const Offset(0.95, 0.95),
-                      end: const Offset(1.05, 1.05),
-                      duration: 1600.ms,
-                      curve: Curves.easeInOut,
-                    )
-                    .shimmer(
-                      delay: 2000.ms,
-                      duration: 1500.ms,
-                      color: Colors.white.withValues(alpha: 0.4),
-                    ),
+                ),
               ),
               const SizedBox(width: 16),
               // Right: Text Content
@@ -272,31 +255,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _navigateTo(BuildContext context, Widget screen) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 300),
-        reverseTransitionDuration: const Duration(milliseconds: 250),
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final curve = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          );
-          return FadeTransition(
-            opacity: curve,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.04, 0),
-                end: Offset.zero,
-              ).animate(curve),
-              child: child,
-            ),
-          );
-        },
-      ),
-    );
+    SafeNavigator.push(context, screen);
   }
 
   // ─── Quick Actions Feature Cards ─────────────────────────────────────────
@@ -341,17 +300,16 @@ class HomeScreen extends StatelessWidget {
         onTap: () => _navigateTo(context, const RiskAnalysisScreen()),
       ),
       FeatureButton(
-        icon: Icons.bug_report_outlined,
-        label: 'Plant Disease\nDetection',
-        subtitle: 'Detect leaf diseases & pests',
-        delay: 300.ms,
-        isComingSoon: true,
-        onTap: () {},
-      ),
-      FeatureButton(
         icon: Icons.store_rounded,
         label: 'Mandi',
         subtitle: 'Live prices & market rates',
+        delay: 300.ms,
+        onTap: () => _navigateTo(context, const MandiScreen()),
+      ),
+      FeatureButton(
+        icon: Icons.bug_report_outlined,
+        label: 'Plant Disease\nDetection',
+        subtitle: 'Detect leaf diseases & pests',
         delay: 360.ms,
         isComingSoon: true,
         onTap: () {},

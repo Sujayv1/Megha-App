@@ -10,6 +10,7 @@ class GeminiService {
 
   final String _endpoint =
       '${AppConstants.geminiBaseUrl}/${AppConstants.geminiModel}:generateContent';
+  final http.Client _client = http.Client();
 
   /// Analyzes a soil report file (image or PDF) using Gemini vision API.
   /// Returns a [SoilDataModel] parsed from Gemini's structured JSON response.
@@ -40,7 +41,7 @@ class GeminiService {
       },
     };
 
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse(_endpoint),
           headers: {

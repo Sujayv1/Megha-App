@@ -472,10 +472,11 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
 
         return Container(
           margin: const EdgeInsets.only(bottom: 18),
-          child: GlassCard(
-            padding: const EdgeInsets.all(18),
-            borderRadius: 20,
-            child: Column(
+          child: RepaintBoundary(
+            child: GlassCard(
+              padding: const EdgeInsets.all(18),
+              borderRadius: 20,
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Header Row: Farm Name & Location
@@ -766,6 +767,7 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
               ],
             ),
           ),
+        ),
         ).animate(delay: (index * 100).ms).fadeIn(duration: 350.ms);
       },
     );

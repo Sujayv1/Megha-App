@@ -21,6 +21,7 @@ class CropRecommendationService {
 
   static String get _endpoint =>
       '${AppConstants.geminiBaseUrl}/${AppConstants.geminiModel}:generateContent';
+  final http.Client _client = http.Client();
 
   /// Fetches live weather data for city/state via Open-Meteo API.
   Future<String> _fetchLiveWeatherSummary(String city, String state) async {
@@ -28,7 +29,7 @@ class CropRecommendationService {
       final encodedCity = Uri.encodeComponent(city.trim());
       final geoUrl =
           Uri.parse('https://geocoding-api.open-meteo.com/v1/search?name=$encodedCity&count=1');
-      final geoRes = await http.get(geoUrl).timeout(const Duration(seconds: 4));
+      final geoRes = await _client.get(geoUrl).timeout(const Duration(seconds: 4));
 
 
       if (geoRes.statusCode == 200) {
@@ -41,7 +42,7 @@ class CropRecommendationService {
           final weatherUrl = Uri.parse(
               'https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto');
           final weatherRes =
-              await http.get(weatherUrl).timeout(const Duration(seconds: 4));
+              await _client.get(weatherUrl).timeout(const Duration(seconds: 4));
 
           if (weatherRes.statusCode == 200) {
             final wData = jsonDecode(weatherRes.body);
@@ -77,7 +78,7 @@ class CropRecommendationService {
       final encodedCity = Uri.encodeComponent(trimmedCity);
       final url = Uri.parse(
           'https://geocoding-api.open-meteo.com/v1/search?name=$encodedCity&count=10');
-      final response = await http.get(url).timeout(const Duration(seconds: 4));
+      final response = await _client.get(url).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -248,7 +249,7 @@ JSON SCHEMA:
       },
     };
 
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse(_endpoint),
           headers: {

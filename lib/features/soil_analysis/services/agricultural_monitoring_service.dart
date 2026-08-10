@@ -150,6 +150,7 @@ class AgriculturalMonitoringService {
       AgriculturalMonitoringService._();
 
   static const String _cacheKey = 'farmsense_realtime_monitoring_cache';
+  final http.Client _client = http.Client();
 
   /// Returns cached monitoring data if available.
   Future<AgriculturalMonitoringData?> getCachedData() async {
@@ -182,7 +183,7 @@ class AgriculturalMonitoringService {
           '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,shortwave_radiation_sum,et0_fao_evapotranspiration'
           '&timezone=auto&past_days=7&forecast_days=7');
 
-      final resp = await http.get(url).timeout(const Duration(seconds: 8));
+      final resp = await _client.get(url).timeout(const Duration(seconds: 8));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;

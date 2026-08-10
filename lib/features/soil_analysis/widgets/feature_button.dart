@@ -35,84 +35,92 @@ class _FeatureButtonState extends State<FeatureButton> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTap: widget.isComingSoon ? null : widget.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        child: GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-          borderRadius: 26,
-          borderOpacity: 0.25,
-          tint: AppColors.cardCream,
-
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Circular icon container matching Leafloom style in First page.jpg
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF4F7F4),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  widget.icon,
-                  color: AppColors.leafGreen, // Rich dark green icon
-                  size: 30,
-                ),
-              ),
-              const SizedBox(height: 14),
-              // Centered Card Label
-              Text(
-                widget.label,
-                textAlign: TextAlign.center,
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
-                  height: 1.2,
-                ),
-              ),
-              if (widget.isComingSoon) ...[
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.leafGreen.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Soon',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: AppColors.leafGreen,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+    Widget card = GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+      borderRadius: 26,
+      borderOpacity: 0.25,
+      tint: AppColors.cardCream,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Circular icon container matching Leafloom style in First page.jpg
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F7F4),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
-            ],
+            ),
+            child: Icon(
+              widget.icon,
+              color: AppColors.leafGreen,
+              size: 30,
+            ),
           ),
-        ),
-      )
-          .animate(delay: widget.delay)
-          .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-          .slideY(begin: 0.2, end: 0, duration: 400.ms, curve: Curves.easeOut),
+          const SizedBox(height: 14),
+          Text(
+            widget.label,
+            textAlign: TextAlign.center,
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.2,
+            ),
+          ),
+          if (widget.isComingSoon) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.leafGreen.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Soon',
+                style: textTheme.bodySmall?.copyWith(
+                  color: AppColors.leafGreen,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
+
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTapDown: (_) {
+          if (!widget.isComingSoon && mounted) setState(() => _pressed = true);
+        },
+        onTapUp: (_) {
+          if (!widget.isComingSoon && mounted) setState(() => _pressed = false);
+        },
+        onTapCancel: () {
+          if (!widget.isComingSoon && mounted) setState(() => _pressed = false);
+        },
+        onTap: widget.isComingSoon ? null : widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? 0.95 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: card,
+        ),
+      ),
+    )
+        .animate(delay: widget.delay, autoPlay: true)
+        .fadeIn(duration: 350.ms, curve: Curves.easeOutCubic)
+        .slideY(begin: 0.12, end: 0, duration: 350.ms, curve: Curves.easeOutCubic);
   }
 }

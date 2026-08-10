@@ -21,8 +21,9 @@ class SoilNutrientCard extends StatelessWidget {
     final valueText = _formatValue(entry.value);
     final unitText = entry.unit.isNotEmpty ? ' ${entry.unit}' : '';
 
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    return RepaintBoundary(
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       borderRadius: 18,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -59,6 +60,7 @@ class SoilNutrientCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     )
         .animate(delay: delay)
         .fadeIn(duration: 350.ms)

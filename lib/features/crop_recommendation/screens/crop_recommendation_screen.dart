@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../soil_analysis/services/soil_storage_service.dart';
 import '../../soil_analysis/widgets/glass_card.dart';
@@ -1257,103 +1258,136 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgMid,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-        ),
-        title: Row(
-          children: [
-            Text(plan.cropIcon, style: const TextStyle(fontSize: 24)),
-            const SizedBox(width: 8),
-            Text(
-              'Adopt ${plan.cropName}',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Name your farm field to start tracking cultivation and fertilizer schedules in My Farms:',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: farmNameController,
-              decoration: _inputDecoration(
-                'Farm Field Name',
-                Icons.edit_location_alt_rounded,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        child: GlassCard(
+          padding: const EdgeInsets.all(22),
+          borderRadius: 26,
+          opacity: 0.98,
+          tint: Colors.white,
+          borderColor: AppColors.leafGreen.withValues(alpha: 0.4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(plan.cropIcon, style: const TextStyle(fontSize: 26)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Adopt ${plan.cropName}',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              farmNameController.dispose();
-              Navigator.pop(ctx);
-            },
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textMuted),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.leafGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 14),
+              Text(
+                'Name your farm field to start tracking cultivation and fertilizer schedules in My Farms:',
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFF334155),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                ),
               ),
-            ),
-            onPressed: () async {
-              final enteredName = farmNameController.text;
-              farmNameController.dispose();
-              Navigator.pop(ctx);
+              const SizedBox(height: 14),
+              TextField(
+                controller: farmNameController,
+                style: GoogleFonts.poppins(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                ),
+                decoration: _inputDecoration(
+                  'Farm Field Name',
+                  Icons.edit_location_alt_rounded,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      farmNameController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.leafGreen,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 11,
+                      ),
+                    ),
+                    onPressed: () async {
+                      final enteredName = farmNameController.text;
+                      farmNameController.dispose();
+                      Navigator.pop(ctx);
 
-              final location =
-                  '${_cityController.text.trim()}, $_selectedState';
-              await CropRecommendationStorageService.instance
-                  .adoptCropToMyFarms(
-                    cropPlan: plan,
-                    farmName: enteredName,
-                    location: location,
-                  );
+                      final location =
+                          '${_cityController.text.trim()}, $_selectedState';
+                      await CropRecommendationStorageService.instance
+                          .adoptCropToMyFarms(
+                        cropPlan: plan,
+                        farmName: enteredName,
+                        location: location,
+                      );
 
-              await CropRecommendationStorageService.instance
-                  .clearCachedRecommendation();
+                      await CropRecommendationStorageService.instance
+                          .clearCachedRecommendation();
 
-              if (mounted) {
-                setState(() {
-                  _recommendationResult = null;
-                  _cityController.clear();
-                  _selectedSoilReport = null;
-                  _successNotification = 'Crop have been saved to my farms';
-                });
+                      if (mounted) {
+                        setState(() {
+                          _recommendationResult = null;
+                          _cityController.clear();
+                          _selectedSoilReport = null;
+                          _successNotification =
+                              'Crop have been saved to my farms';
+                        });
 
-                Future.delayed(const Duration(seconds: 3), () {
-                  if (mounted && _successNotification != null) {
-                    setState(() {
-                      _successNotification = null;
-                    });
-                  }
-                });
-              }
-
-            },
-            child: const Text(
-              'Save to My Farms',
-              style: TextStyle(color: Colors.white),
-            ),
+                        Future.delayed(const Duration(seconds: 3), () {
+                          if (mounted && _successNotification != null) {
+                            setState(() {
+                              _successNotification = null;
+                            });
+                          }
+                        });
+                      }
+                    },
+                    child: Text(
+                      'Save to My Farms',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
