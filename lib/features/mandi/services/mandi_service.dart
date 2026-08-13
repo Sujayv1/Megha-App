@@ -1,6 +1,32 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/mandi_data_model.dart';
+import '../../../core/network/http_client_provider.dart';
+
+// ─── Helpers for commodity matching & isolate offloading ────────────────────
+
+/// Core commodity string matching algorithm.
+/// Matches exact equality, or substring containment in either direction.
+List<dynamic> _matchCommodityRecords(List<dynamic> records, String searchCrop) {
+  if (records.isEmpty || searchCrop.isEmpty) return [];
+  final cropTerm = searchCrop.trim().toLowerCase();
+  final matched = <dynamic>[];
+  for (final r in records) {
+    if (r is! Map) continue;
+    final cm = (r['commodity']?.toString() ?? '').trim().toLowerCase();
+    if (cm.isEmpty) continue;
+    if (cropTerm == cm || cropTerm.contains(cm) || cm.contains(cropTerm)) {
+      matched.add(r);
+    }
+  }
+  return matched;
+}
+
+/// Top-level helper function for compute() isolate execution.
+List<dynamic> _matchCommodityIsolate(List<dynamic> args) {
+  return _matchCommodityRecords(args[0] as List<dynamic>, args[1] as String);
+}
 
 class MandiService {
   MandiService._();
@@ -10,10 +36,18 @@ class MandiService {
   static const String _resourceId = '9ef84268-d588-465a-a308-a864a43d0070';
   static const String _baseUrl = 'https://api.data.gov.in/resource/$_resourceId';
 
+  /// Threshold for isolate filtering.
+  /// Datasets with <= 50 records are filtered synchronously on the main thread
+  /// to avoid isolate spawn and deep-copy serialization overhead.
+  /// Datasets with > 50 records use compute() to offload CPU work.
+  static const int _isolateThreshold = 50;
+
   // In-Memory API Response Cache (5 minute TTL)
   final Map<String, dynamic> _cache = {};
   final Map<String, DateTime> _cacheTime = {};
-  final http.Client _client = http.Client();
+
+  // Uses shared app-wide http.Client to avoid separate connection pools.
+  http.Client get _client => AppHttpClient.instance;
 
   static const Map<String, List<String>> indianStatesDistricts = {
     "Andhra Pradesh": ["Anantapur", "Chittoor", "East Godavari", "Guntur", "Krishna", "Kurnool", "Prakasam", "Srikakulam", "Visakhapatnam", "Vizianagaram", "West Godavari", "YSR Kadapa", "Nandyal", "Eluru", "NTR"],
@@ -90,20 +124,14 @@ class MandiService {
     return [];
   }
 
-  List<dynamic> _matchCommodityRecords(List<dynamic> records, String searchCrop) {
-    if (records.isEmpty || searchCrop.isEmpty) return [];
-    final cropTerm = searchCrop.trim().toLowerCase();
-    final matched = <dynamic>[];
-
-    for (final r in records) {
-      if (r is! Map) continue;
-      final cm = (r['commodity']?.toString() ?? '').trim().toLowerCase();
-      if (cm.isEmpty) continue;
-      if (cropTerm == cm || cropTerm.contains(cm) || cm.contains(cropTerm)) {
-        matched.add(r);
-      }
+  /// Filters [records] for matching [commodity].
+  /// Uses synchronous filtering for <= [_isolateThreshold] records to avoid
+  /// isolate spawn & serialization overhead. Uses compute() for larger datasets.
+  Future<List<dynamic>> _filterCommodity(List<dynamic> records, String commodity) async {
+    if (records.length <= _isolateThreshold) {
+      return _matchCommodityRecords(records, commodity);
     }
-    return matched;
+    return compute(_matchCommodityIsolate, [records, commodity]);
   }
 
   double _safeDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -118,13 +146,15 @@ class MandiService {
     required String district,
     required String commodity,
   }) async {
+    List<dynamic>? allIndiaMatched;
+
     // 1. District Level Records
     var districtRaw = await _fetchRecords({
       'limit': '500',
       'filters[state]': state,
       'filters[district]': district,
     });
-    var matchedRecords = _matchCommodityRecords(districtRaw, commodity);
+    var matchedRecords = await _filterCommodity(districtRaw, commodity);
     String scopeNote = 'Mandis in $district, $state';
 
     // 2. Fallback to State level
@@ -133,7 +163,7 @@ class MandiService {
         'limit': '500',
         'filters[state]': state,
       });
-      matchedRecords = _matchCommodityRecords(stateRaw, commodity);
+      matchedRecords = await _filterCommodity(stateRaw, commodity);
       if (matchedRecords.isNotEmpty) {
         scopeNote = '$state Mandis (Nearest to $district)';
       }
@@ -145,7 +175,8 @@ class MandiService {
         'limit': '500',
         'filters[commodity]': commodity,
       });
-      matchedRecords = _matchCommodityRecords(allIndiaRaw, commodity);
+      allIndiaMatched = await _filterCommodity(allIndiaRaw, commodity);
+      matchedRecords = allIndiaMatched;
       if (matchedRecords.isNotEmpty) {
         scopeNote = 'Mandis Reporting Prices for $commodity (Nearest to $district, $state)';
       }
@@ -191,12 +222,15 @@ class MandiService {
       }
     }
 
-    // Fetch All-India Records for Highest Market Price
-    var allIndiaRaw = await _fetchRecords({
-      'limit': '500',
-      'filters[commodity]': commodity,
-    });
-    var allIndiaMatched = _matchCommodityRecords(allIndiaRaw, commodity);
+    // Reuse All-India Records for Highest Market Price if already fetched in fallback,
+    // otherwise fetch & filter them now.
+    if (allIndiaMatched == null) {
+      var allIndiaRaw = await _fetchRecords({
+        'limit': '500',
+        'filters[commodity]': commodity,
+      });
+      allIndiaMatched = await _filterCommodity(allIndiaRaw, commodity);
+    }
 
     if (allIndiaMatched.isEmpty && matchedRecords.isNotEmpty) {
       allIndiaMatched = matchedRecords;

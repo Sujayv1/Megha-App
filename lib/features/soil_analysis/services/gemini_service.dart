@@ -1,8 +1,78 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/soil_data_model.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/network/http_client_provider.dart';
+
+// ─── Top-level functions for compute() isolation ─────────────────────────────
+// These MUST be top-level (not instance methods) so compute() can spawn them.
+
+/// Reads a file from [filePath] and returns its base64-encoded content.
+/// Runs on a background isolate via compute() to avoid blocking the UI thread.
+Future<String> _encodeFileToBase64(String filePath) async {
+  final bytes = await File(filePath).readAsBytes();
+  return base64Encode(bytes);
+}
+
+/// Parses a [SoilDataModel] from the raw Gemini JSON response string.
+/// Runs on a background isolate via compute() to avoid blocking the UI thread.
+SoilDataModel _parseSoilDataModel(String jsonStr) {
+  return SoilDataModel.fromJson(_safeDecodeJson(jsonStr));
+}
+
+Map<String, dynamic> _safeDecodeJson(String text) {
+  try {
+    return jsonDecode(text) as Map<String, dynamic>;
+  } catch (_) {
+    // Attempt JSON repair for truncated or malformed responses
+    String repaired = text.trim();
+    repaired = repaired.replaceAll(RegExp(r',?\s*"[^"]*$'), '');
+    repaired = repaired.replaceAll(RegExp(r',\s*$'), '');
+
+    int openBraces = 0;
+    int openBrackets = 0;
+    bool inString = false;
+    bool escape = false;
+
+    for (int i = 0; i < repaired.length; i++) {
+      final char = repaired[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char == '\\') {
+        escape = true;
+        continue;
+      }
+      if (char == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char == '{') openBraces++;
+        if (char == '}') openBraces--;
+        if (char == '[') openBrackets++;
+        if (char == ']') openBrackets--;
+      }
+    }
+
+    if (inString) repaired += '"';
+    while (openBrackets > 0) {
+      repaired += ']';
+      openBrackets--;
+    }
+    while (openBraces > 0) {
+      repaired += '}';
+      openBraces--;
+    }
+
+    return jsonDecode(repaired) as Map<String, dynamic>;
+  }
+}
+
+// ─── GeminiService ────────────────────────────────────────────────────────────
 
 class GeminiService {
   GeminiService._();
@@ -10,13 +80,18 @@ class GeminiService {
 
   final String _endpoint =
       '${AppConstants.geminiBaseUrl}/${AppConstants.geminiModel}:generateContent';
-  final http.Client _client = http.Client();
+
+  // Uses shared app-wide http.Client to avoid separate connection pools.
+  http.Client get _client => AppHttpClient.instance;
 
   /// Analyzes a soil report file (image or PDF) using Gemini vision API.
   /// Returns a [SoilDataModel] parsed from Gemini's structured JSON response.
+  ///
+  /// File encoding and JSON parsing are both offloaded to background isolates
+  /// via [compute()] so the main/UI thread is never blocked.
   Future<SoilDataModel> analyzeSoilReport(File file) async {
-    final bytes = await file.readAsBytes();
-    final base64Data = base64Encode(bytes);
+    // Offload file read + base64 encoding to a background isolate.
+    final base64Data = await compute(_encodeFileToBase64, file.path);
     final mimeType = _getMimeType(file.path);
 
     final requestBody = {
@@ -37,7 +112,7 @@ class GeminiService {
         'response_mime_type': 'application/json',
         'temperature': 0.1,
         'topP': 0.8,
-        'maxOutputTokens': 8192, // Increased from 2048 to 8192 for large reports
+        'maxOutputTokens': 2048,
       },
     };
 
@@ -60,6 +135,82 @@ class GeminiService {
     return _parseResponse(response.body);
   }
 
+  /// Sends an agricultural chat message to Gemini API with strict agricultural guardrails.
+  /// Enforces system instruction and returns Megha AI's response text.
+  Future<String> sendAgriculturalChatMessage(
+      List<Map<String, String>> history) async {
+    final contents = <Map<String, dynamic>>[];
+
+    // 1. Enforce agricultural guardrail system prompt
+    contents.add({
+      'role': 'user',
+      'parts': [
+        {'text': AppConstants.meghaChatGuardrailPrompt}
+      ],
+    });
+    contents.add({
+      'role': 'model',
+      'parts': [
+        {
+          'text':
+              'Understood! I am Megha AI, your dedicated agricultural assistant. I will strictly answer questions related to farming, crops, soil health, mandi prices, and agriculture, and decline unrelated queries.'
+        }
+      ],
+    });
+
+    // 2. Append chat conversation history
+    for (final msg in history) {
+      final isUser = msg['role'] == 'user';
+      contents.add({
+        'role': isUser ? 'user' : 'model',
+        'parts': [
+          {'text': msg['content'] ?? ''}
+        ],
+      });
+    }
+
+    final requestBody = {
+      'contents': contents,
+      'generationConfig': {
+        'temperature': 0.3,
+        'topP': 0.85,
+        'maxOutputTokens': 1024,
+      },
+    };
+
+    final response = await _client
+        .post(
+          Uri.parse(_endpoint),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': AppConstants.geminiApiKey,
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode != 200) {
+      final error = _parseError(response.body);
+      throw GeminiException('Gemini API error (${response.statusCode}): $error');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final candidates = decoded['candidates'] as List<dynamic>?;
+    if (candidates == null || candidates.isEmpty) {
+      throw const GeminiException('No response candidates from Gemini');
+    }
+
+    final candidate = candidates[0] as Map<String, dynamic>;
+    final content = candidate['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List<dynamic>?;
+    if (parts == null || parts.isEmpty) {
+      final finishReason = candidate['finishReason']?.toString();
+      throw GeminiException('Empty response from Megha AI (Reason: $finishReason)');
+    }
+
+    return parts[0]['text']?.toString().trim() ?? '';
+  }
+
   // ─── Private Helpers ────────────────────────────────────────────────────────
 
   String _getMimeType(String path) {
@@ -74,7 +225,7 @@ class GeminiService {
     };
   }
 
-  SoilDataModel _parseResponse(String responseBody) {
+  Future<SoilDataModel> _parseResponse(String responseBody) async {
     final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
 
     final candidates = decoded['candidates'] as List<dynamic>?;
@@ -113,62 +264,12 @@ class GeminiService {
     }
 
     try {
-      final jsonData = _safeDecodeJson(cleaned);
-      return SoilDataModel.fromJson(jsonData);
+      // Offload JSON parsing + SoilDataModel construction to background isolate.
+      return await compute(_parseSoilDataModel, cleaned);
     } catch (e) {
       final snippet =
           cleaned.length > 250 ? '${cleaned.substring(0, 250)}...' : cleaned;
       throw GeminiException('Failed to parse Gemini JSON response: $e\nRaw: $snippet');
-    }
-  }
-
-  Map<String, dynamic> _safeDecodeJson(String text) {
-    try {
-      return jsonDecode(text) as Map<String, dynamic>;
-    } catch (_) {
-      // Attempt JSON repair for truncated or malformed responses
-      String repaired = text.trim();
-      repaired = repaired.replaceAll(RegExp(r',?\s*"[^"]*$'), '');
-      repaired = repaired.replaceAll(RegExp(r',\s*$'), '');
-
-      int openBraces = 0;
-      int openBrackets = 0;
-      bool inString = false;
-      bool escape = false;
-
-      for (int i = 0; i < repaired.length; i++) {
-        final char = repaired[i];
-        if (escape) {
-          escape = false;
-          continue;
-        }
-        if (char == '\\') {
-          escape = true;
-          continue;
-        }
-        if (char == '"') {
-          inString = !inString;
-          continue;
-        }
-        if (!inString) {
-          if (char == '{') openBraces++;
-          if (char == '}') openBraces--;
-          if (char == '[') openBrackets++;
-          if (char == ']') openBrackets--;
-        }
-      }
-
-      if (inString) repaired += '"';
-      while (openBrackets > 0) {
-        repaired += ']';
-        openBrackets--;
-      }
-      while (openBraces > 0) {
-        repaired += '}';
-        openBraces--;
-      }
-
-      return jsonDecode(repaired) as Map<String, dynamic>;
     }
   }
 

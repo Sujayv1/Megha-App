@@ -12,10 +12,8 @@ import '../../auth/screens/profile_screen.dart';
 import '../../mandi/screens/mandi_screen.dart';
 import '../../risk_analysis/screens/risk_analysis_screen.dart';
 import 'real_time_data_screen.dart';
-
-
-
-
+import 'megha_ai_chat_screen.dart';
+import '../../../core/widgets/hero_agent_widget.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -39,17 +37,18 @@ class HomeScreen extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
-                    child: Text(
-                      'Quick Actions',
-                      style: GoogleFonts.poppins(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(delay: 250.ms, duration: 400.ms)
-                        .slideX(begin: -0.05, end: 0, delay: 250.ms),
+                    child:
+                        Text(
+                              'Quick Actions',
+                              style: GoogleFonts.poppins(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            )
+                            .animate()
+                            .fadeIn(delay: 250.ms, duration: 400.ms)
+                            .slideX(begin: -0.05, end: 0, delay: 250.ms),
                   ),
                 ),
                 SliverPadding(
@@ -57,14 +56,12 @@ class HomeScreen extends StatelessWidget {
                   sliver: SliverGrid(
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: 0.95,
-                    ),
-                    delegate: SliverChildListDelegate(
-                      _featureCards(context),
-                    ),
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
+                          childAspectRatio: 0.95,
+                        ),
+                    delegate: SliverChildListDelegate(_featureCards(context)),
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 36)),
@@ -122,14 +119,15 @@ class HomeScreen extends StatelessWidget {
               ),
             ],
           ).animate().fadeIn(delay: 150.ms),
-
-
         ],
       ),
     );
   }
 
-  Widget _buildIconButton({required IconData icon, required VoidCallback onTap}) {
+  Widget _buildIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -151,11 +149,7 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(
-          icon,
-          color: AppColors.leafGreen,
-          size: 22,
-        ),
+        child: Icon(icon, color: AppColors.leafGreen, size: 22),
       ),
     );
   }
@@ -166,66 +160,51 @@ class HomeScreen extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
       child: RepaintBoundary(
-        child: GlassCard(
-          tint: AppColors.cardCream,
-          borderOpacity: 0.25,
-
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              // Left Media Slot (Reserved for future GIF / Video)
-              Container(
-                width: 95,
-                height: 110,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: AppColors.leafGreen.withValues(alpha: 0.18),
-                  ),
+        child: GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MeghaAiChatScreen()),
+          ),
+          child: GlassCard(
+            tint: AppColors.cardCream,
+            borderOpacity: 0.25,
+            padding: const EdgeInsets.fromLTRB(44, 20, 14, 20),
+            child: Row(
+              children: [
+                // Left Animated Blooming SVG Logo (Outer Banner)
+                const HeroBannerAgentWidget(
+                  width: 85,
+                  height: 90,
+                  scaleFactor: 0.95,
                 ),
-                child: Center(
-                  child: Image.asset(
-                    'assets/images/leaf.png',
-                    width: 72,
-                    height: 72,
-                    fit: BoxFit.contain,
-                    errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Right: Text Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Meet Megha AI',
-                      style: GoogleFonts.poppins(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.leafGreen,
+                const SizedBox(width: 16),
+                // Right: Text Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Meet Megha AI',
+                        style: GoogleFonts.poppins(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.leafGreen,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Your personal\nagricultural assistant',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                        height: 1.4,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your personal\nagricultural assistant',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                          height: 1.4,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SoilAnalysisScreen()),
-                      ),
-                      child: Row(
+                      const SizedBox(height: 10),
+                      Row(
                         children: [
                           Text(
-                            'Tap to start',
+                            'Tap to chat',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -240,17 +219,14 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      )
-          .animate()
-          .fadeIn(delay: 150.ms, duration: 450.ms)
-          .slideY(begin: 0.1, end: 0, delay: 150.ms, curve: Curves.easeOut),
+      ),
     );
   }
 
@@ -324,8 +300,6 @@ class HomeScreen extends StatelessWidget {
       ),
     ];
   }
-
-
 }
 
 // ─── Static Background ────────────────────────────────────────────────────────
@@ -377,4 +351,3 @@ class _StaticBackground extends StatelessWidget {
     );
   }
 }
-

@@ -31,13 +31,15 @@ class _RoseThreeLoaderState extends State<RoseThreeLoader>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   late final Stopwatch _stopwatch;
+  // ValueNotifier drives AnimatedBuilder — only the CustomPaint leaf repaints.
+  final _elapsed = ValueNotifier<int>(0);
 
   @override
   void initState() {
     super.initState();
     _stopwatch = Stopwatch()..start();
     _ticker = createTicker((_) {
-      if (mounted) setState(() {});
+      _elapsed.value = _stopwatch.elapsedMilliseconds;
     })
       ..start();
   }
@@ -46,6 +48,7 @@ class _RoseThreeLoaderState extends State<RoseThreeLoader>
   void dispose() {
     _ticker.dispose();
     _stopwatch.stop();
+    _elapsed.dispose();
     super.dispose();
   }
 
@@ -54,13 +57,16 @@ class _RoseThreeLoaderState extends State<RoseThreeLoader>
     final activeColor = widget.color ?? AppColors.leafGreen;
     final activeGlow = widget.glowColor ?? AppColors.glowGreen;
 
-    return CustomPaint(
-      size: Size(widget.size, widget.size),
-      painter: _RoseThreePainter(
-        elapsedMs: _stopwatch.elapsedMilliseconds,
-        color: activeColor,
-        glowColor: activeGlow,
-        particleCount: widget.particleCount,
+    return AnimatedBuilder(
+      animation: _elapsed,
+      builder: (_, _) => CustomPaint(
+        size: Size(widget.size, widget.size),
+        painter: _RoseThreePainter(
+          elapsedMs: _elapsed.value,
+          color: activeColor,
+          glowColor: activeGlow,
+          particleCount: widget.particleCount,
+        ),
       ),
     );
   }

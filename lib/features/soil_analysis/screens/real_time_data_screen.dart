@@ -18,6 +18,11 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   bool _isLoading = false;
   AgriculturalMonitoringData? _data;
 
+  // Memoized sort result — computed once per data load, not on every build().
+  // The section key sort is constant for a given dataset; re-sorting on every
+  // build() (triggered by tab switches, scroll, etc.) is redundant work.
+  List<String>? _sortedSectionKeys;
+
   late AnimationController _refreshRotationController;
 
   @override
@@ -46,7 +51,10 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   }
 
   Future<void> _refreshData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _sortedSectionKeys = null; // Clear memoized sort on refresh
+    });
     _refreshRotationController.repeat();
 
     try {
@@ -59,6 +67,14 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
       if (!mounted) return;
       setState(() {
         _data = fresh;
+        // Compute and cache section key sort once — reused across all builds.
+        final rawSections = fresh.sections;
+        _sortedSectionKeys = rawSections.keys.toList()
+          ..sort((a, b) {
+            if (a.contains('satellite')) return -1;
+            if (b.contains('satellite')) return 1;
+            return a.compareTo(b);
+          });
       });
 
       final timeStr =
@@ -701,13 +717,13 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   Widget _buildTechnicalView(TextTheme textTheme) {
     final rawSections = _data?.sections ?? {};
 
-    // Sort sections so Satellite & Vegetation is 01
-    final sortedKeys = rawSections.keys.toList()
+    // Use memoized sort — computed once in _refreshData(), not on every build.
+    final sortedKeys = _sortedSectionKeys ?? (rawSections.keys.toList()
       ..sort((a, b) {
         if (a.contains('satellite')) return -1;
         if (b.contains('satellite')) return 1;
         return a.compareTo(b);
-      });
+      }));
 
     int totalIndicators = 0;
     for (final items in rawSections.values) {

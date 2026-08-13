@@ -8,7 +8,7 @@ import 'features/soil_analysis/screens/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Lock to portrait for a consistent farmer dashboard UX
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
@@ -21,14 +21,27 @@ void main() async {
     ),
   );
 
-  final isLoggedIn = await AuthStorageService.instance.isLoggedIn();
-
-  runApp(FarmSenseApp(isLoggedIn: isLoggedIn));
+  // runApp fires immediately after binding initialization
+  runApp(const FarmSenseApp());
 }
 
-class FarmSenseApp extends StatelessWidget {
-  final bool isLoggedIn;
-  const FarmSenseApp({super.key, required this.isLoggedIn});
+class FarmSenseApp extends StatefulWidget {
+  const FarmSenseApp({super.key});
+
+  @override
+  State<FarmSenseApp> createState() => _FarmSenseAppState();
+}
+
+class _FarmSenseAppState extends State<FarmSenseApp> {
+  // Store authentication Future once in initState to avoid anti-pattern of
+  // recreating the Future on every build call.
+  late final Future<bool> _authFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _authFuture = AuthStorageService.instance.isLoggedIn();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +49,37 @@ class FarmSenseApp extends StatelessWidget {
       title: 'FarmSense',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: isLoggedIn ? const HomeScreen() : const LoginScreen(),
+      home: FutureBuilder<bool>(
+        future: _authFuture,
+        builder: (context, snapshot) {
+          // While resolving SharedPreferences, render the app's ambient
+          // gradient background for a seamless, instant first frame matching
+          // the app's visual identity (no harsh dark screen or flash).
+          if (!snapshot.hasData) {
+            return const Scaffold(
+              backgroundColor: AppColors.bgTop,
+              body: SizedBox.expand(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.bgTop,
+                        AppColors.bgMid,
+                        AppColors.bgBottom,
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+          return snapshot.data == true
+              ? const HomeScreen()
+              : const LoginScreen();
+        },
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/network/http_client_provider.dart';
 
 class MonitoringItem {
   final String name;
@@ -150,7 +151,9 @@ class AgriculturalMonitoringService {
       AgriculturalMonitoringService._();
 
   static const String _cacheKey = 'farmsense_realtime_monitoring_cache';
-  final http.Client _client = http.Client();
+
+  // Uses shared app-wide http.Client to avoid separate connection pools.
+  http.Client get _client => AppHttpClient.instance;
 
   /// Returns cached monitoring data if available.
   Future<AgriculturalMonitoringData?> getCachedData() async {
