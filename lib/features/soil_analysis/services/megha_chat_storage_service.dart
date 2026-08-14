@@ -1,21 +1,26 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'megha_rag_service.dart';
 
 class ChatMessageModel {
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime timestamp;
+  final List<Citation>? citations;
 
   const ChatMessageModel({
     required this.role,
     required this.content,
     required this.timestamp,
+    this.citations,
   });
 
   Map<String, dynamic> toJson() => {
         'role': role,
         'content': content,
         'timestamp': timestamp.toIso8601String(),
+        if (citations != null)
+          'citations': citations!.map((c) => c.toJson()).toList(),
       };
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) =>
@@ -25,6 +30,9 @@ class ChatMessageModel {
         timestamp: json['timestamp'] != null
             ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now()
             : DateTime.now(),
+        citations: (json['citations'] as List<dynamic>?)
+            ?.map((c) => Citation.fromJson(c as Map<String, dynamic>))
+            .toList(),
       );
 }
 

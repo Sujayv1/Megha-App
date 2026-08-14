@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/hero_agent_widget.dart';
-import '../services/gemini_service.dart';
 import '../services/megha_chat_storage_service.dart';
+import '../services/megha_rag_service.dart';
 import '../widgets/glass_card.dart';
 
 class MeghaAiChatScreen extends StatefulWidget {
@@ -63,7 +64,8 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     }
 
     final newId = DateTime.now().millisecondsSinceEpoch.toString();
-    final updatedSessions = await MeghaChatStorageService.instance.loadSessions();
+    final updatedSessions = await MeghaChatStorageService.instance
+        .loadSessions();
 
     if (mounted) {
       setState(() {
@@ -88,7 +90,8 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
       await _autoSaveCurrentSession();
     }
 
-    final updatedSessions = await MeghaChatStorageService.instance.loadSessions();
+    final updatedSessions = await MeghaChatStorageService.instance
+        .loadSessions();
     if (mounted) {
       setState(() {
         _savedSessions = updatedSessions;
@@ -183,23 +186,19 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     await _autoSaveCurrentSession();
 
     try {
-      final historyPayload = _messages
-          .map((m) => {
-                'role': m.role == 'user' ? 'user' : 'model',
-                'content': m.content,
-              })
-          .toList();
-
-      final responseText = await GeminiService.instance
-          .sendAgriculturalChatMessage(historyPayload);
+      // Execute MeghaRag Grounded RAG Pipeline (Strictly from Chroma DB Documents)
+      final ragResponse = await MeghaRagService.instance.query(text);
 
       if (mounted) {
         setState(() {
           _messages.add(
             ChatMessageModel(
               role: 'assistant',
-              content: responseText,
+              content: ragResponse.answer,
               timestamp: DateTime.now(),
+              citations: ragResponse.citations.isNotEmpty
+                  ? ragResponse.citations
+                  : null,
             ),
           );
           _isThinking = false;
@@ -214,7 +213,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
             ChatMessageModel(
               role: 'assistant',
               content:
-                  '⚠️ Could not connect to Megha AI. Please check network connection and try again.',
+                  '⚠️ Could not connect to Megha AI RAG database. Please check network connection and try again.',
               timestamp: DateTime.now(),
             ),
           );
@@ -391,8 +390,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                   ),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded,
-                        color: AppColors.textMuted),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.textMuted,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -409,8 +410,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                   _startNewChat();
                 },
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.leafGreen.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
@@ -420,8 +423,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.add_circle_outline_rounded,
-                          color: AppColors.leafGreen),
+                      const Icon(
+                        Icons.add_circle_outline_rounded,
+                        color: AppColors.leafGreen,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         'Start New Chat',
@@ -472,7 +477,9 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                             ),
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 2),
+                                horizontal: 12,
+                                vertical: 2,
+                              ),
                               title: Text(
                                 session.title,
                                 maxLines: 1,
@@ -545,47 +552,80 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            // Megha AI Avatar: Dedicated ChatAvatarAgentWidget with clean right spacing
+            // Megha AI Avatar: Dedicated ChatAvatarAgentWidget positioned close to the left edge
             const Padding(
-              padding: EdgeInsets.only(right: 12, top: 2),
+              padding: EdgeInsets.only(right: 5, top: 2),
               child: ChatAvatarAgentWidget(width: 30, height: 30),
             ),
           ],
           Flexible(
-            child: RepaintBoundary(
-              child: GlassCard(
-                tint: isUser
-                    ? AppColors.leafGreen.withValues(alpha: 0.16)
-                    : AppColors.cardCream,
-                borderOpacity: 0.25,
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: isUser
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      message.content,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13.5,
-                        color: AppColors.textPrimary,
-                        height: 1.5,
+            child: Padding(
+              padding: EdgeInsets.only(right: isUser ? 0 : 20),
+              child: RepaintBoundary(
+                child: GlassCard(
+                  tint: isUser
+                      ? AppColors.leafGreen.withValues(alpha: 0.16)
+                      : AppColors.cardCream,
+                  borderOpacity: 0.25,
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: isUser
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      MarkdownBody(
+                        data: message.content,
+                        selectable: true,
+                        styleSheet:
+                            MarkdownStyleSheet.fromTheme(
+                              Theme.of(context),
+                            ).copyWith(
+                              p: GoogleFonts.poppins(
+                                fontSize: 13.5,
+                                color: AppColors.textPrimary,
+                                height: 1.5,
+                              ),
+                              strong: GoogleFonts.poppins(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.leafGreen,
+                              ),
+                              listBullet: GoogleFonts.poppins(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.leafGreen,
+                              ),
+                              h1: GoogleFonts.poppins(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.leafGreen,
+                              ),
+                              h2: GoogleFonts.poppins(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.leafGreen,
+                              ),
+                            ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
+                      if (message.citations != null &&
+                          message.citations!.isNotEmpty)
+                        _buildCitationsWidget(message.citations!),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -616,6 +656,90 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.1, end: 0.0);
   }
 
+  // ── Grounded Citations Widget (Clean & Minimal) ─────────────────────────────
+
+  Widget _buildCitationsWidget(List<Citation> citations) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.menu_book_rounded,
+                size: 13,
+                color: AppColors.leafGreen,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Sources (${citations.length})',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.leafGreen,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: citations.map((c) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.leafGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: AppColors.leafGreen.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.leafGreen.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        'SOURCE ${c.sourceId}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.leafGreen,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        c.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Thinking Indicator ────────────────────────────────────────────────────
 
   Widget _buildThinkingIndicator() {
@@ -624,7 +748,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
       child: Row(
         children: [
           const ChatAvatarAgentWidget(width: 30, height: 30),
-          const SizedBox(width: 12),
+          const SizedBox(width: 6),
           Flexible(
             child: GlassCard(
               tint: AppColors.cardCream,
@@ -647,21 +771,22 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                       3,
                       (i) => Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: Container(
-                          width: 5,
-                          height: 5,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.leafGreen,
-                          ),
-                        )
-                            .animate(onPlay: (c) => c.repeat(reverse: true))
-                            .scale(
-                              delay: Duration(milliseconds: i * 200),
-                              duration: 600.ms,
-                              begin: const Offset(0.5, 0.5),
-                              end: const Offset(1.3, 1.3),
-                            ),
+                        child:
+                            Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.leafGreen,
+                                  ),
+                                )
+                                .animate(onPlay: (c) => c.repeat(reverse: true))
+                                .scale(
+                                  delay: Duration(milliseconds: i * 200),
+                                  duration: 600.ms,
+                                  begin: const Offset(0.5, 0.5),
+                                  end: const Offset(1.3, 1.3),
+                                ),
                       ),
                     ),
                   ),
@@ -701,7 +826,9 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                     ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                   onSubmitted: (_) => _sendMessage(),
                 ),
