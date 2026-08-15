@@ -16,7 +16,6 @@ class MandiScreen extends StatefulWidget {
 class _MandiScreenState extends State<MandiScreen> {
   final ScrollController _scrollController = ScrollController();
 
-  // Initially NO values selected
   String _selectedState = '';
   String _selectedDistrict = '';
   String _selectedCrop = '';
@@ -152,36 +151,7 @@ class _MandiScreenState extends State<MandiScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: Colors.red.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline_rounded,
-                              color: Colors.red,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _errorMessage!,
-                                style: GoogleFonts.poppins(
-                                  color: Colors.red,
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      child: _buildErrorBanner(_errorMessage!),
                     ),
                   ),
 
@@ -197,80 +167,186 @@ class _MandiScreenState extends State<MandiScreen> {
                     ),
                   )
                 else if (_mandiResponse != null) ...[
-                  // SECTION 1 Header: Selected City / District Mandis
+                  // ── SECTION 1: Selected District Mandis ─────────────────────────
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _buildLocalSectionHeader(),
+                      child: _buildSectionHeader(
+                        tierNumber: '1',
+                        tierColor: AppColors.leafGreen,
+                        sectionIcon: Icons.my_location_rounded,
+                        title: 'Mandis in Selected District',
+                        subtitle: '$_selectedDistrict, $_selectedState',
+                      ),
                     ),
                   ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-                  // SECTION 1 Content: Lazy Loaded SliverList for City Mandi Cards
-                  if (_mandiResponse!.localMandis.isEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: GlassCard(
-                          padding: const EdgeInsets.all(16),
-                          borderRadius: 18,
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.info_outline_rounded,
-                                color: AppColors.accentGold,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'No active Mandi price record found for "$_selectedCrop" in $_selectedDistrict, $_selectedState today.',
-                                  style: GoogleFonts.poppins(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  else
+                  if (_mandiResponse!.districtMandis.isNotEmpty)
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       sliver: SliverList.separated(
-                        itemCount: _mandiResponse!.localMandis.length,
-                        separatorBuilder: (_, index) =>
-                            const SizedBox(height: 12),
+                        itemCount: _mandiResponse!.districtMandis.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
-                          final mandi = _mandiResponse!.localMandis[index];
-                          return RepaintBoundary(child: _buildMandiCard(mandi));
+                          final item = _mandiResponse!.districtMandis[index];
+                          return RepaintBoundary(child: _buildMandiCard(item));
+                        },
+                      ),
+                    )
+                  else if (_mandiResponse!.activeDistrictOtherCrops.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildWarningNoticeCard(
+                          icon: Icons.warning_amber_rounded,
+                          iconColor: const Color(0xFFF59E0B),
+                          title: 'No Active Trade for "$_selectedCrop"',
+                          message:
+                              'No active trades reported for "$_selectedCrop" in $_selectedDistrict today. Showing active Mandi markets trading other commodities in $_selectedDistrict below:',
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList.separated(
+                        itemCount: _mandiResponse!.activeDistrictOtherCrops.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = _mandiResponse!.activeDistrictOtherCrops[index];
+                          return RepaintBoundary(child: _buildMandiCard(item));
                         },
                       ),
                     ),
+                  ] else
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildWarningNoticeCard(
+                          icon: Icons.location_off_rounded,
+                          iconColor: const Color(0xFFEF4444),
+                          title: 'No Reporting Markets in District',
+                          message:
+                              'No Mandi price records reported for $_selectedDistrict today. Check neighboring state/district results below.',
+                        ),
+                      ),
+                    ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-                  // SECTION 2: Highest Mandi Price in India
-                  if (_mandiResponse!.highest != null)
+                  // ── SECTION 2: Selected State Mandis ────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildSectionHeader(
+                        tierNumber: '2',
+                        tierColor: const Color(0xFF38BDF8),
+                        sectionIcon: Icons.account_balance_rounded,
+                        title: 'Mandis in Selected State',
+                        subtitle: 'Other Mandis in $_selectedState',
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+
+                  if (_mandiResponse!.stateMandis.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList.separated(
+                        itemCount: _mandiResponse!.stateMandis.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final item = _mandiResponse!.stateMandis[index];
+                          return RepaintBoundary(child: _buildMandiCard(item));
+                        },
+                      ),
+                    )
+                  else
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildWarningNoticeCard(
+                          icon: Icons.travel_explore_rounded,
+                          iconColor: const Color(0xFF38BDF8),
+                          title: 'No State Trades Reported',
+                          message:
+                              'No other Mandis in $_selectedState reported prices for "$_selectedCrop" today.',
+                        ),
+                      ),
+                    ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+                  // ── SECTION 3: Best Mandi Choice Hero Card ──────────────────────
+                  if (_mandiResponse!.bestMandi != null) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildSectionHeader(
+                          tierNumber: '3',
+                          tierColor: const Color(0xFFF59E0B),
+                          sectionIcon: Icons.stars_rounded,
+                          title: 'Best Mandi Choice',
+                          subtitle: 'Recommended Top Market for Maximum Return',
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: RepaintBoundary(
-                          child: _buildHighestMandiCard(
-                            _mandiResponse!.highest!,
-                            _mandiResponse!.diffPercent,
-                            _mandiResponse!.diffAmountQuintal,
-                          ),
+                          child: _buildBestMandiCard(_mandiResponse!.bestMandi!),
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  ],
+
+                  // ── SECTION 4: Remaining Mandis ──────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildSectionHeader(
+                        tierNumber: '4',
+                        tierColor: const Color(0xFF9CA3AF),
+                        sectionIcon: Icons.public_rounded,
+                        title: 'Remaining Mandi Results',
+                        subtitle: 'Ranked Strictly by Geographic Proximity',
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+
+                  if (_mandiResponse!.remainingMandis.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList.separated(
+                        itemCount: _mandiResponse!.remainingMandis.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final item = _mandiResponse!.remainingMandis[index];
+                          return RepaintBoundary(child: _buildMandiCard(item));
+                        },
+                      ),
+                    )
+                  else
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildWarningNoticeCard(
+                          icon: Icons.check_circle_outline_rounded,
+                          iconColor: const Color(0xFF9CA3AF),
+                          title: 'Complete Search Results',
+                          message:
+                              'All active Mandi price records for "$_selectedCrop" have been loaded.',
                         ),
                       ),
                     ),
                 ],
 
-                const SliverToBoxAdapter(child: SizedBox(height: 36)),
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
               ],
             ),
           ),
@@ -283,82 +359,49 @@ class _MandiScreenState extends State<MandiScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AppColors.leafGreen.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      color: AppColors.textPrimary,
-                      size: 18,
-                    ),
-                  ),
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.leafGreen.withValues(alpha: 0.2),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Mandi Prices',
-                        style: GoogleFonts.poppins(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        'Real-Time Crop Market Rates',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.leafGreen.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.leafGreen.withValues(alpha: 0.3),
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: AppColors.textPrimary,
+                size: 18,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.circle, color: AppColors.leafGreen, size: 7),
-                const SizedBox(width: 5),
                 Text(
-                  'OGD LIVE',
+                  'Mandi Prices',
                   style: GoogleFonts.poppins(
-                    fontSize: 10,
+                    fontSize: 19,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.leafGreen,
+                    color: AppColors.textPrimary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Real-Time Ranked Crop Intelligence',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -386,7 +429,7 @@ class _MandiScreenState extends State<MandiScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Mandi Market Intelligence',
+                  'Harvested Crop Price Intelligence',
                   style: GoogleFonts.poppins(
                     fontSize: 15.5,
                     fontWeight: FontWeight.w800,
@@ -400,7 +443,7 @@ class _MandiScreenState extends State<MandiScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Select State, District, and Crop Name to search and fetch live Mandi prices.',
+            'Select State, District, and Harvested Crop to search ranked Mandi prices.',
             style: GoogleFonts.poppins(
               fontSize: 11.5,
               color: AppColors.textMuted,
@@ -419,13 +462,13 @@ class _MandiScreenState extends State<MandiScreen> {
             onChanged: (st) {
               setState(() {
                 _selectedState = st;
-                _selectedDistrict = ''; // Reset district when state changes
+                _selectedDistrict = '';
               });
             },
           ),
           const SizedBox(height: 10),
 
-          // 2. District Selector Dropdown (Disabled until State is selected)
+          // 2. District Selector Dropdown
           MandiDropdownSelector(
             label: 'District',
             icon: Icons.location_city_rounded,
@@ -443,7 +486,7 @@ class _MandiScreenState extends State<MandiScreen> {
 
           // 3. Crop Selector Dropdown
           MandiDropdownSelector(
-            label: 'Crop Name',
+            label: 'Harvested Crop',
             icon: Icons.grass_rounded,
             selectedValue: _selectedCrop,
             items: MandiService.popularCommodities,
@@ -487,7 +530,7 @@ class _MandiScreenState extends State<MandiScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Search & Fetch Mandi Prices',
+                          'Fetch Mandi Results',
                           style: GoogleFonts.poppins(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w800,
@@ -503,39 +546,64 @@ class _MandiScreenState extends State<MandiScreen> {
     );
   }
 
-  Widget _buildLocalSectionHeader() {
-    final scopeNote = _mandiResponse!.scopeNote;
-
+  Widget _buildSectionHeader({
+    required String tierNumber,
+    required Color tierColor,
+    required IconData sectionIcon,
+    required String title,
+    required String subtitle,
+  }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(
-          Icons.location_city_rounded,
-          color: AppColors.leafGreen,
-          size: 20,
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: tierColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: tierColor.withValues(alpha: 0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            tierNumber,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: Colors.black,
+            ),
+          ),
         ),
+        const SizedBox(width: 10),
+        Icon(sectionIcon, size: 20, color: tierColor),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Selected District/City Mandis',
+                title,
                 style: GoogleFonts.poppins(
-                  fontSize: 15.5,
+                  fontSize: 15,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
               Text(
-                scopeNote,
+                subtitle,
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.leafGreen,
+                  color: AppColors.textMuted,
                 ),
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -545,18 +613,163 @@ class _MandiScreenState extends State<MandiScreen> {
     );
   }
 
+  // ─── Professional Warning & Notice Cards ────────────────────────────────────
+
+  Widget _buildWarningNoticeCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String message,
+  }) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      borderRadius: 16,
+      borderColor: iconColor.withValues(alpha: 0.35),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: GoogleFonts.poppins(
+                    color: AppColors.textMuted,
+                    fontSize: 11.5,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.red.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.red,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.poppins(
+                color: Colors.red,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Mandi Item Card ────────────────────────────────────────────────────────
+
   Widget _buildMandiCard(MandiPriceRecord mandi) {
+    final distPill = mandi.isSameDistrict
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.leafGreen.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.leafGreen.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.near_me_rounded, size: 10, color: AppColors.leafGreen),
+                const SizedBox(width: 4),
+                Text(
+                  'Selected District',
+                  style: GoogleFonts.poppins(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.leafGreen,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.navigation_rounded, size: 10, color: Color(0xFF38BDF8)),
+                const SizedBox(width: 4),
+                Text(
+                  '${mandi.distanceKm} km away',
+                  style: GoogleFonts.poppins(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF38BDF8),
+                  ),
+                ),
+              ],
+            ),
+          );
+
     return Container(
       decoration: BoxDecoration(
-        border: const Border(
-          left: BorderSide(color: AppColors.leafGreen, width: 4),
+        border: Border(
+          left: BorderSide(
+            color: mandi.isSameDistrict ? AppColors.leafGreen : const Color(0xFF38BDF8),
+            width: 4,
+          ),
         ),
         borderRadius: BorderRadius.circular(18),
       ),
       child: GlassCard(
         padding: const EdgeInsets.all(14),
         borderRadius: 18,
-        borderColor: AppColors.leafGreen.withValues(alpha: 0.25),
+        borderColor: mandi.isSameDistrict
+            ? AppColors.leafGreen.withValues(alpha: 0.25)
+            : const Color(0xFF38BDF8).withValues(alpha: 0.25),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -564,12 +777,19 @@ class _MandiScreenState extends State<MandiScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.store_rounded,
-                  color: AppColors.leafGreen,
-                  size: 19,
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: (mandi.isSameDistrict ? AppColors.leafGreen : const Color(0xFF38BDF8)).withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.storefront_rounded,
+                    color: mandi.isSameDistrict ? AppColors.leafGreen : const Color(0xFF38BDF8),
+                    size: 17,
+                  ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '${mandi.market} Mandi',
@@ -583,35 +803,34 @@ class _MandiScreenState extends State<MandiScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.leafGreen.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.leafGreen.withValues(alpha: 0.25),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on_rounded, size: 11, color: AppColors.textMuted),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${mandi.district}, ${mandi.state}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: Text(
-                    '📍 ${mandi.district}, ${mandi.state}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.leafGreen,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                    const SizedBox(height: 3),
+                    distPill,
+                  ],
                 ),
               ],
             ),
 
             const SizedBox(height: 10),
 
-            // Price Box Grid (Overflow Protected)
+            // Price Box Grid
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -703,12 +922,12 @@ class _MandiScreenState extends State<MandiScreen> {
 
             const SizedBox(height: 10),
 
-            // Meta Details Rows (Full unclipped values)
+            // Meta Details Rows
             Row(
               children: [
-                Expanded(child: _buildMetaItem('Crop', mandi.commodity)),
-                Expanded(child: _buildMetaItem('Variety', mandi.variety)),
-                Expanded(child: _buildMetaItem('Grade', mandi.grade)),
+                Expanded(child: _buildMetaItem('Crop', mandi.commodity, Icons.grass_rounded)),
+                Expanded(child: _buildMetaItem('Variety', mandi.variety, Icons.tune_rounded)),
+                Expanded(child: _buildMetaItem('Grade', mandi.grade, Icons.verified_outlined)),
               ],
             ),
             const SizedBox(height: 8),
@@ -718,12 +937,14 @@ class _MandiScreenState extends State<MandiScreen> {
                   child: _buildMetaItem(
                     'Min Price',
                     '₹${mandi.minPriceQuintal.toStringAsFixed(0)}/qtn (₹${mandi.minPriceKg.toStringAsFixed(1)}/kg)',
+                    Icons.trending_down_rounded,
                   ),
                 ),
                 Expanded(
                   child: _buildMetaItem(
                     'Max Price',
                     '₹${mandi.maxPriceQuintal.toStringAsFixed(0)}/qtn (₹${mandi.maxPriceKg.toStringAsFixed(1)}/kg)',
+                    Icons.trending_up_rounded,
                   ),
                 ),
               ],
@@ -774,299 +995,357 @@ class _MandiScreenState extends State<MandiScreen> {
     );
   }
 
-  // ─── SECTION 2: Highest Mandi Price in India ──────────────────────────────
-  Widget _buildHighestMandiCard(
-    MandiHighestRecord highest,
-    double? diffPercent,
-    double? diffAmount,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Section Title Header
-        Row(
+  // ─── BEST MANDI CHOICE HERO CARD (Tier 3 - Radiant Amber Gold Palette) ──────
+
+  Widget _buildBestMandiCard(MandiPriceRecord mandi) {
+    const amberGoldPrimary = Color(0xFFD97706);
+    const amberGoldBright = Color(0xFFF59E0B);
+    const amberBgTint = Color(0xFFFFFBEB);
+
+    return Container(
+      decoration: BoxDecoration(
+        border: const Border(
+          left: BorderSide(color: amberGoldBright, width: 5),
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: amberGoldBright.withValues(alpha: 0.18),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: GlassCard(
+        padding: const EdgeInsets.all(18),
+        borderRadius: 20,
+        borderColor: amberGoldBright.withValues(alpha: 0.5),
+        gradient: LinearGradient(
+          colors: [
+            amberGoldBright.withValues(alpha: 0.14),
+            amberBgTint.withValues(alpha: 0.65),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.emoji_events_rounded,
-              color: AppColors.accentGold,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Highest Mandi Price in India',
-                style: GoogleFonts.poppins(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.accentGold,
+            // Top Glowing Ribbon Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [amberGoldBright, amberGoldPrimary],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: amberGoldBright.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.workspace_premium_rounded, size: 14, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(
+                    'RECOMMENDED BEST MANDI CHOICE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${mandi.market} Mandi',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded, size: 13, color: amberGoldPrimary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${mandi.district}, ${mandi.state}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                color: AppColors.textMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: amberGoldBright.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: amberGoldBright.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        mandi.isSameDistrict ? Icons.near_me_rounded : Icons.navigation_rounded,
+                        size: 11,
+                        color: amberGoldPrimary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        mandi.isSameDistrict ? 'Same District' : '${mandi.distanceKm} km away',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: amberGoldPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            if (mandi.reason != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: amberGoldBright.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: amberGoldBright.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_rounded, size: 16, color: amberGoldPrimary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        mandi.reason!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 14),
+
+            // Price Display Grid (Radiant Amber Highlight)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: amberGoldBright.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Modal Price (Quintal)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.5,
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '₹${mandi.modalPriceQuintal.toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: amberGoldPrimary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'per Quintal (100 kg)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 9.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 42,
+                    color: amberGoldBright.withValues(alpha: 0.3),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Converted Price (Kg)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.5,
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '₹${mandi.modalPriceKg.toStringAsFixed(1)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'per Kilogram',
+                          style: GoogleFonts.poppins(
+                            fontSize: 9.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(child: _buildMetaItem('Crop', mandi.commodity, Icons.grass_rounded)),
+                Expanded(child: _buildMetaItem('Variety', mandi.variety, Icons.tune_rounded)),
+                Expanded(
+                  child: _buildMetaItem(
+                    'Min / Max',
+                    '₹${mandi.minPriceQuintal.toStringAsFixed(0)} - ₹${mandi.maxPriceQuintal.toStringAsFixed(0)}',
+                    Icons.swap_vert_rounded,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: amberGoldBright.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: amberGoldBright.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.event_available_rounded,
+                    size: 15,
+                    color: amberGoldPrimary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Arrival Date: ',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _formatDateWithTag(mandi.arrivalDate),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-
-        const SizedBox(height: 10),
-
-        Container(
-          decoration: BoxDecoration(
-            border: const Border(
-              left: BorderSide(color: AppColors.accentGold, width: 4),
-            ),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: GlassCard(
-            padding: const EdgeInsets.all(16),
-            borderRadius: 18,
-            borderColor: AppColors.accentGold.withValues(alpha: 0.4),
-            gradient: LinearGradient(
-              colors: [
-                AppColors.accentGold.withValues(alpha: 0.08),
-                Colors.white.withValues(alpha: 0.6),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Row: Highest Market Title & Higher Comparison Badge
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'HIGHEST RECORDED MARKET',
-                            style: GoogleFonts.poppins(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.accentGold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${highest.market} Mandi',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '📍 ${highest.district}, ${highest.state}',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (diffPercent != null && diffPercent > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentGold.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppColors.accentGold.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Text(
-                          '⚡ +$diffPercent% Higher',
-                          style: GoogleFonts.poppins(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.accentGold,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // Price Box Grid
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppColors.accentGold.withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Highest Mandi Price',
-                              style: GoogleFonts.poppins(
-                                fontSize: 10,
-                                color: AppColors.textMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                '₹${highest.maxPriceQuintal.toStringAsFixed(0)}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.accentGold,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              'per Quintal (100 kg)',
-                              style: GoogleFonts.poppins(
-                                fontSize: 9.5,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        width: 1,
-                        height: 38,
-                        color: AppColors.accentGold.withValues(alpha: 0.25),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Converted Price (Kg)',
-                              style: GoogleFonts.poppins(
-                                fontSize: 10,
-                                color: AppColors.textMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                '₹${highest.maxPriceKg.toStringAsFixed(1)}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              'per Kilogram',
-                              style: GoogleFonts.poppins(
-                                fontSize: 9.5,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Meta Info Row
-                Row(
-                  children: [
-                    Expanded(child: _buildMetaItem('Variety', highest.variety)),
-                    Expanded(
-                      child: _buildMetaItem(
-                        'Modal Price',
-                        '₹${highest.modalPriceQuintal.toStringAsFixed(0)}/qtn',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentGold.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppColors.accentGold.withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_month_rounded,
-                        size: 14,
-                        color: AppColors.accentGold,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Arrival Date: ',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          _formatDateWithTag(highest.arrivalDate),
-                          style: GoogleFonts.poppins(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildMetaItem(String label, String value) {
+  Widget _buildMetaItem(String label, String value, [IconData? icon]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 9.5,
-            color: AppColors.textMuted,
-            fontWeight: FontWeight.w600,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 11, color: AppColors.textMuted),
+              const SizedBox(width: 3),
+            ],
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 9.5,
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
         Text(
           value,

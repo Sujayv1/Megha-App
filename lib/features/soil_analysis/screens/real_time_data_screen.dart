@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/agricultural_monitoring_service.dart';
 import '../widgets/glass_card.dart';
@@ -42,7 +43,10 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   }
 
   Future<void> _loadInitialData() async {
-    final cached = await AgriculturalMonitoringService.instance.getCachedData();
+    final cached = await AgriculturalMonitoringService.instance.getCachedData(
+      targetLat: AppConstants.defaultLatitude,
+      targetLon: AppConstants.defaultLongitude,
+    );
     if (cached != null) {
       setState(() => _data = cached);
     } else {
@@ -58,8 +62,14 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     _refreshRotationController.repeat();
 
     try {
+      // Force clear old cached data from SharedPreferences to fetch fresh data
+      await AgriculturalMonitoringService.instance.clearCache();
+
       final results = await Future.wait([
-        AgriculturalMonitoringService.instance.fetchMonitoringData(),
+        AgriculturalMonitoringService.instance.fetchMonitoringData(
+          lat: AppConstants.defaultLatitude,
+          lon: AppConstants.defaultLongitude,
+        ),
         Future.delayed(const Duration(milliseconds: 2500)),
       ]);
       final fresh = results[0] as AgriculturalMonitoringData;
@@ -775,7 +785,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'Location: Shillong, Meghalaya (25.5788° N, 91.8933° E) • Data retrieved $dateStr',
+            'Location: Bengaluru, Karnataka (12.93940° N, 77.69470° E) • Data retrieved $dateStr',
             style: GoogleFonts.poppins(
               fontSize: 11.5,
               color: AppColors.textPrimary,
@@ -828,18 +838,12 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
                   ),
                   const SizedBox(height: 10),
 
-                  // 2-Column Grid of Parameter Cards
-                  GridView.builder(
+                  // 1-Column Full Width List of Parameter Cards (1 reading per row)
+                  ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: items.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 15,
-                          childAspectRatio: 1.22,
-                        ),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, idx) {
                       return _buildParameterCard(items[idx]);
                     },
@@ -856,81 +860,133 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   Widget _buildParameterCard(MonitoringItem item) {
     final (shortCode, fullDesc) = _parseItemTitle(item.name);
     final badgeText = _getBadgeText(item.dataType);
-    final formattedVal =
-        '${item.value}${item.unit.isNotEmpty && item.unit != 'index' && item.unit != 'status' && item.unit != 'risk status' ? " ${item.unit}" : ""}';
+
+    // Clean value formatting — prevent any "mm/day mm/day" duplication
+    var valStr = item.value.toString();
+    if (valStr.contains('mm/day') && item.unit.contains('mm/day')) {
+      valStr = valStr.replaceAll('mm/day', '').trim();
+    }
+    final unitStr = (item.unit.isNotEmpty &&
+            item.unit != 'index' &&
+            item.unit != 'status' &&
+            item.unit != 'risk status' &&
+            !valStr.endsWith(item.unit))
+        ? " ${item.unit}"
+        : "";
+    final formattedVal = '$valStr$unitStr';
     final dateStr = _formatDateStr(item.observationDate);
     final progress = _calculateProgress(item.name, item.value);
 
+    // Only long text action recommendations (like "Apply Supplemental Irrigation") get a status box.
+    // Standard numeric measurements (22.5 MJ/m², 0.4 mm, 4.85 mm/day, 27.5 °C) stay cleanly aligned on top-right.
+    final isSentenceStatus = formattedVal.length > 20 ||
+        formattedVal.contains('Irrigation') ||
+        formattedVal.contains('Optimal') ||
+        formattedVal.contains('Supplemental');
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
+        color: Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.leafGreen.withValues(alpha: 0.22)),
         boxShadow: AppColors.glassShadows,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          // Top Row: Code
-          Text(
-            shortCode,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-              color: AppColors.textPrimary,
-            ),
+          // Top Row: Code Title & Value (for standard numeric readings)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      shortCode,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (fullDesc != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        fullDesc,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10.5,
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (!isSentenceStatus) ...[
+                const SizedBox(width: 10),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topRight,
+                  child: Text(
+                    formattedVal,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18.5,
+                      color: item.value.toString() == 'GOOD' ||
+                              item.value.toString() == 'LOW'
+                          ? AppColors.leafGreen
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 3),
 
-          // Value (Scaled down with FittedBox to prevent any 47px overflow)
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              formattedVal,
-              maxLines: 1,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                color:
-                    item.value.toString() == 'GOOD' ||
-                        item.value.toString() == 'LOW'
-                    ? AppColors.leafGreen
-                    : AppColors.textPrimary,
+          // Snug, Content-Fitted Status Box for sentence recommendations (NOT full width)
+          if (isSentenceStatus) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.leafGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.leafGreen.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  formattedVal,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: item.value.toString().contains('Optimal') ||
+                            item.value.toString() == 'GOOD' ||
+                            item.value.toString() == 'LOW'
+                        ? AppColors.leafGreen
+                        : AppColors.textPrimary,
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 3),
+          ],
 
-          // Subtitle / Description Slot (Fixed 26px height so status bar & bottom row align perfectly in every card)
-          SizedBox(
-            height: 26,
-            child: fullDesc != null
-                ? Text(
-                    fullDesc,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                      fontSize: 9.5,
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
 
           // Accent Progress Bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 3.5,
+              minHeight: 4,
               backgroundColor: AppColors.leafGreen.withValues(alpha: 0.12),
               valueColor: const AlwaysStoppedAnimation<Color>(
                 AppColors.leafGreen,
@@ -939,13 +995,13 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
           ),
           const SizedBox(height: 10),
 
-          // Bottom Row: Type Badge on Bottom Left | Black & Bold Date on Right
+          // Bottom Row: Type Badge on Left | Date String on Right
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.leafGreen.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -956,7 +1012,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
                 child: Text(
                   badgeText,
                   style: GoogleFonts.poppins(
-                    fontSize: 9.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: AppColors.leafGreen,
                   ),
@@ -965,7 +1021,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
               Text(
                 dateStr,
                 style: GoogleFonts.poppins(
-                  fontSize: 9.5,
+                  fontSize: 10.5,
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1039,8 +1095,11 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     if (name.contains('Water Stress Status')) {
       return ('Water Stress', 'Soil-Canopy Deficit');
     }
-    if (name.contains('Net Irrigation Water')) {
-      return ('Irrigation Req', 'Net Water Requirement');
+    if (name.contains('Net Water Deficit') || name.contains('Net Irrigation Water')) {
+      return ('Water Deficit Req', 'Net Water Deficit Requirement');
+    }
+    if (name.contains('Irrigation Action Recommendation')) {
+      return ('Irrigation Action', 'Irrigation Action Recommendation');
     }
     if (name.contains('Land Surface Temperature')) {
       return ('LST', 'Land Surface Temperature');

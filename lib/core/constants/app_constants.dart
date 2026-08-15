@@ -9,9 +9,12 @@ class AppConstants {
       'https://generativelanguage.googleapis.com/v1beta/models';
   static const String geminiModel = 'gemini-3.6-flash';
 
-  // App
+  // App & Location
   static const String appName = 'FarmSense';
   static const String appVersion = '1.0.0';
+  static const double defaultLatitude = 12.93940;
+  static const double defaultLongitude = 77.69470;
+  static const String defaultLocationName = 'Bengaluru, Karnataka (12.9394° N, 77.6947° E)';
 
   // Megha AI Chat Guardrail Prompt
   static const String meghaChatGuardrailPrompt = '''

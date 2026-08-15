@@ -133,8 +133,8 @@ class AgriculturalMonitoringData {
         .toList();
 
     return AgriculturalMonitoringData(
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 25.5788,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 91.8933,
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 12.93940,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 77.69470,
       generatedAt:
           DateTime.tryParse(json['generatedAt']?.toString() ?? '') ?? DateTime.now(),
       satelliteMetadata:
@@ -155,23 +155,38 @@ class AgriculturalMonitoringService {
   // Uses shared app-wide http.Client to avoid separate connection pools.
   http.Client get _client => AppHttpClient.instance;
 
-  /// Returns cached monitoring data if available.
-  Future<AgriculturalMonitoringData?> getCachedData() async {
+  /// Returns cached monitoring data if available and matching target coordinates.
+  Future<AgriculturalMonitoringData?> getCachedData({
+    double targetLat = 12.93940,
+    double targetLon = 77.69470,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_cacheKey);
     if (jsonStr == null || jsonStr.isEmpty) return null;
     try {
       final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return AgriculturalMonitoringData.fromJson(map);
+      final data = AgriculturalMonitoringData.fromJson(map);
+      if ((data.latitude - targetLat).abs() > 0.001 ||
+          (data.longitude - targetLon).abs() > 0.001) {
+        await prefs.remove(_cacheKey);
+        return null;
+      }
+      return data;
     } catch (_) {
       return null;
     }
   }
 
+  /// Explicitly clears cached monitoring data from SharedPreferences.
+  Future<void> clearCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cacheKey);
+  }
+
   /// Fetches fresh Open-Meteo weather and Earth Engine satellite data.
   Future<AgriculturalMonitoringData> fetchMonitoringData({
-    double lat = 25.5788,
-    double lon = 91.8933,
+    double lat = 12.93940,
+    double lon = 77.69470,
   }) async {
     final now = DateTime.now();
     final todayStr = now.toIso8601String().substring(0, 10);
@@ -259,18 +274,18 @@ class AgriculturalMonitoringService {
         }
       }
     } catch (_) {
-      // Fallback weather data if HTTP fails
+      // Fallback weather data if HTTP fails (Bengaluru regional climate)
       weatherData = {
-        'temp': 20.1,
-        'temp_max': 26.4,
-        'temp_min': 20.0,
-        'humidity': 97.0,
-        'rain_24h': 2.7,
-        'rain_7d': 64.7,
-        'rain_prob_max': 86,
-        'wind': 8.5,
-        'solar': 20.21,
-        'et0': 4.03,
+        'temp': 27.5,
+        'temp_max': 29.8,
+        'temp_min': 20.2,
+        'humidity': 68.0,
+        'rain_24h': 0.4,
+        'rain_7d': 12.5,
+        'rain_prob_max': 35,
+        'wind': 12.4,
+        'solar': 22.50,
+        'et0': 4.85,
         'date_str': todayStr,
       };
     }
@@ -316,7 +331,7 @@ class AgriculturalMonitoringService {
     const satSource = 'Sentinel-2 Surface Reflectance (Simulated GEE)';
 
     final netIrrigReq = (weatherData['et0'] as double) - ((weatherData['rain_24h'] as double) * 0.7);
-    final irrigReqStr = '${netIrrigReq.clamp(0.0, 10.0).toStringAsFixed(1)} mm/day';
+    final irrigReqNum = double.parse(netIrrigReq.clamp(0.0, 10.0).toStringAsFixed(1));
     final irrigAction = netIrrigReq <= 1.5
         ? 'Optimal Soil Moisture - No Irrigation Needed'
         : 'Apply Supplemental Irrigation';
@@ -529,8 +544,8 @@ class AgriculturalMonitoringService {
         ),
         MonitoringItem(
           name: 'Net Irrigation Water Requirement',
-          value: irrigReqStr,
-          unit: 'mm/day req',
+          value: irrigReqNum,
+          unit: 'mm/day',
           source: 'Penman-Monteith Water Balance Model',
           observationDate: todayStr,
           dataAgeDays: 0,
@@ -637,7 +652,7 @@ class AgriculturalMonitoringService {
         ),
         MonitoringItem(
           name: 'Net Water Deficit Requirement',
-          value: irrigReqStr,
+          value: irrigReqNum,
           unit: 'mm/day',
           source: 'Penman-Monteith Water Balance Model',
           observationDate: todayStr,

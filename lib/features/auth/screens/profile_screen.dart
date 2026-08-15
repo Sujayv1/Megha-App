@@ -290,7 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final fullName = _user?.fullName.isNotEmpty == true ? _user!.fullName : 'Sujay V';
     final email = _user?.email.isNotEmpty == true ? _user!.email : 'sujay@megha.ai';
     final phone = _user?.phone.isNotEmpty == true ? _user!.phone : '+91 98765 43210';
-    final location = _user?.farmLocation.isNotEmpty == true ? _user!.farmLocation : 'Shillong, Meghalaya (25.5788° N, 91.8933° E)';
+    final location = _user?.farmLocation.isNotEmpty == true ? _user!.farmLocation : 'Bengaluru, Karnataka (12.93940° N, 77.69470° E)';
 
     return Scaffold(
       backgroundColor: AppColors.bgTop,

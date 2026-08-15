@@ -355,7 +355,7 @@ class _RiskAnalysisScreenState extends State<RiskAnalysisScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Shillong, Meghalaya • $dateRangeStr',
+                          'Bengaluru, Karnataka • $dateRangeStr',
                           style: GoogleFonts.poppins(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,

@@ -19,6 +19,10 @@ class MandiPriceRecord {
   final double maxPriceQuintal;
   final double maxPriceKg;
   final String arrivalDate;
+  final double distanceKm;
+  final bool isSameDistrict;
+  final bool isSameState;
+  final String? reason;
 
   const MandiPriceRecord({
     required this.market,
@@ -34,6 +38,10 @@ class MandiPriceRecord {
     required this.maxPriceQuintal,
     required this.maxPriceKg,
     required this.arrivalDate,
+    this.distanceKm = 0.0,
+    this.isSameDistrict = false,
+    this.isSameState = false,
+    this.reason,
   });
 
   factory MandiPriceRecord.fromJson(
@@ -78,6 +86,32 @@ class MandiPriceRecord {
       maxPriceQuintal: maxP,
       maxPriceKg: _safeDouble(maxKg.toStringAsFixed(2)),
       arrivalDate: json['arrival_date']?.toString() ?? 'Latest',
+      distanceKm: _safeDouble(json['distance_km']),
+      isSameDistrict: json['is_same_district'] as bool? ?? false,
+      isSameState: json['is_same_state'] as bool? ?? false,
+      reason: json['reason']?.toString(),
+    );
+  }
+
+  MandiPriceRecord copyWithReason(String newReason) {
+    return MandiPriceRecord(
+      market: market,
+      district: district,
+      state: state,
+      commodity: commodity,
+      variety: variety,
+      grade: grade,
+      modalPriceQuintal: modalPriceQuintal,
+      modalPriceKg: modalPriceKg,
+      minPriceQuintal: minPriceQuintal,
+      minPriceKg: minPriceKg,
+      maxPriceQuintal: maxPriceQuintal,
+      maxPriceKg: maxPriceKg,
+      arrivalDate: arrivalDate,
+      distanceKm: distanceKm,
+      isSameDistrict: isSameDistrict,
+      isSameState: isSameState,
+      reason: newReason,
     );
   }
 }
@@ -127,24 +161,27 @@ class MandiHighestRecord {
   }
 }
 
+/// 4-Tier Mandi Response matching mandi.py
 class MandiResponse {
   final String queryState;
   final String queryDistrict;
   final String queryCommodity;
-  final List<MandiPriceRecord> localMandis;
-  final String scopeNote;
-  final MandiHighestRecord? highest;
-  final double? diffAmountQuintal;
-  final double? diffPercent;
+  final List<MandiPriceRecord> districtMandis;
+  final List<MandiPriceRecord> activeDistrictOtherCrops;
+  final List<MandiPriceRecord> stateMandis;
+  final MandiPriceRecord? bestMandi;
+  final List<MandiPriceRecord> remainingMandis;
+  final List<MandiPriceRecord> allMandis;
 
   const MandiResponse({
     required this.queryState,
     required this.queryDistrict,
     required this.queryCommodity,
-    required this.localMandis,
-    required this.scopeNote,
-    this.highest,
-    this.diffAmountQuintal,
-    this.diffPercent,
+    required this.districtMandis,
+    required this.activeDistrictOtherCrops,
+    required this.stateMandis,
+    required this.bestMandi,
+    required this.remainingMandis,
+    required this.allMandis,
   });
 }
