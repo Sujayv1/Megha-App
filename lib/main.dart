@@ -5,13 +5,9 @@ import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_storage_service.dart';
 import 'features/soil_analysis/screens/home_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Lock to portrait for a consistent farmer dashboard UX
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -40,6 +36,12 @@ class _FarmSenseAppState extends State<FarmSenseApp> {
   @override
   void initState() {
     super.initState();
+    // Lock orientations once widget tree is mounted to prevent 0x0 viewport stalls
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+
     _authFuture = AuthStorageService.instance.isLoggedIn();
   }
 

@@ -9,6 +9,11 @@ class AppConstants {
       'https://generativelanguage.googleapis.com/v1beta/models';
   static const String geminiModel = 'gemini-3.6-flash';
 
+  // MapTiler API Key & Style URL
+  static const String mapTilerApiKey = 'gyTUBTYhnOlrjm9nlMVt';
+  static const String mapTilerStyleUrl =
+      'https://api.maptiler.com/maps/hybrid/style.json?key=gyTUBTYhnOlrjm9nlMVt';
+
   // App & Location
   static const String appName = 'FarmSense';
   static const String appVersion = '1.0.0';

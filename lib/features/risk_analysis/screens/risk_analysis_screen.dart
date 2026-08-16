@@ -94,17 +94,35 @@ class _RiskAnalysisScreenState extends State<RiskAnalysisScreen> {
   @override
   void initState() {
     super.initState();
+    AgriculturalMonitoringService.instance.globalDataNotifier
+        .addListener(_onGlobalDataChanged);
     _loadSavedData();
   }
 
+  @override
+  void dispose() {
+    AgriculturalMonitoringService.instance.globalDataNotifier
+        .removeListener(_onGlobalDataChanged);
+    super.dispose();
+  }
+
+  void _onGlobalDataChanged() {
+    final updated =
+        AgriculturalMonitoringService.instance.globalDataNotifier.value;
+    if (updated != null && mounted) {
+      setState(() {
+        _monitoringData = updated;
+      });
+    }
+  }
+
   Future<void> _loadSavedData() async {
-    final cached = await AgriculturalMonitoringService.instance.getCachedData();
-    if (cached != null) {
-      if (mounted) {
-        setState(() {
-          _monitoringData = cached;
-        });
-      }
+    final data =
+        await AgriculturalMonitoringService.instance.initializeGlobalStore();
+    if (mounted) {
+      setState(() {
+        _monitoringData = data;
+      });
     }
   }
 
@@ -112,7 +130,19 @@ class _RiskAnalysisScreenState extends State<RiskAnalysisScreen> {
     if (_isRefreshing) return;
     setState(() => _isRefreshing = true);
     try {
-      final fresh = await AgriculturalMonitoringService.instance.fetchMonitoringData();
+      // Selective Subset Fetching: Requests ONLY the 6 required risk indicators.
+      // Merges fresh values globally, updates global listeners, and saves merged state to disk.
+      final fresh =
+          await AgriculturalMonitoringService.instance.fetchMonitoringData(
+        requiredKeys: {
+          IndicatorKeys.droughtRisk,
+          IndicatorKeys.floodRisk,
+          IndicatorKeys.heatRisk,
+          IndicatorKeys.canopyRisk,
+          IndicatorKeys.waterStress,
+          IndicatorKeys.smRoot,
+        },
+      );
       if (mounted) {
         setState(() {
           _monitoringData = fresh;
