@@ -322,5 +322,48 @@ void main() {
       expect(vegResult.waterStress.severity, equals('MODERATE'));
       expect(silkingResult.waterStress.severity, equals('HIGH'));
     });
+
+    test('13. Farm name is propagated and stored throughout the interpretation', () {
+      final data = createMockData(ndvi: 0.72);
+      final result = service.interpret(
+        monitoringData: data,
+        farmName: 'North Orchard Block B',
+        crop: maize,
+        stage: maizeVeg,
+      );
+
+      expect(result.vegetationHealth.explanation, contains('North Orchard Block B'));
+      expect(result.waterStress.explanation, contains('North Orchard Block B'));
+      expect(result.overallExplanation, contains('North Orchard Block B'));
+    });
+
+    test('14. Strict multi-farm cache segregation and individual farm querying', () {
+      final farmAData = createMockData(ndvi: 0.85, temp: 24.0);
+      final farmBData = createMockData(ndvi: 0.35, temp: 38.0);
+
+      final interpA = service.interpret(
+        monitoringData: farmAData,
+        farmName: 'Farm Plot Alpha',
+        crop: maize,
+        stage: maizeVeg,
+      );
+
+      final interpB = service.interpret(
+        monitoringData: farmBData,
+        farmName: 'Farm Plot Beta',
+        crop: maize,
+        stage: maizeVeg,
+      );
+
+      // Farm Alpha is optimal & healthy
+      expect(interpA.vegetationHealth.severity, equals('NONE'));
+      expect(interpA.vegetationHealth.explanation, contains('Farm Plot Alpha'));
+      expect(interpA.vegetationHealth.explanation, isNot(contains('Farm Plot Beta')));
+
+      // Farm Beta is degraded & heat stressed
+      expect(interpB.vegetationHealth.severity, isNot(equals('NONE')));
+      expect(interpB.vegetationHealth.explanation, contains('Farm Plot Beta'));
+      expect(interpB.vegetationHealth.explanation, isNot(contains('Farm Plot Alpha')));
+    });
   });
 }

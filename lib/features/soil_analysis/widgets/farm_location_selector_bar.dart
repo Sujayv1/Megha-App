@@ -261,9 +261,9 @@ class FarmLocationSelectorBar extends StatelessWidget {
                         ),
                       ),
                       child: ListTile(
-                        onTap: () {
+                        onTap: () async {
                           Navigator.of(ctx).pop();
-                          service.selectLocation(item);
+                          await service.selectLocation(item, forceRefresh: true);
                           onLocationChanged?.call();
                         },
                         leading: Container(

@@ -65,17 +65,23 @@ class IndicatorKeys {
 
 /// Model representing a user's saved farm/plot location.
 class SavedFarmLocation {
-  final String id;
-  final String name;
-  final double latitude;
-  final double longitude;
+  final String id; // Stable unique Farm ID (Primary Key)
+  final String name; // Farm metadata name
+  final double latitude; // Farm metadata latitude
+  final double longitude; // Farm metadata longitude
+  final String? crop; // Optional crop profile metadata
+  final DateTime? cultivationStartDate; // Optional sowing/planting date metadata
   final DateTime createdAt;
+
+  String get farmId => id;
 
   const SavedFarmLocation({
     required this.id,
     required this.name,
     required this.latitude,
     required this.longitude,
+    this.crop,
+    this.cultivationStartDate,
     required this.createdAt,
   });
 
@@ -84,21 +90,49 @@ class SavedFarmLocation {
         'name': name,
         'latitude': latitude,
         'longitude': longitude,
+        if (crop != null) 'crop': crop,
+        if (cultivationStartDate != null)
+          'cultivationStartDate': cultivationStartDate!.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
       };
 
   factory SavedFarmLocation.fromJson(Map<String, dynamic> json) {
     return SavedFarmLocation(
       id: json['id']?.toString() ??
+          json['farmId']?.toString() ??
           DateTime.now().millisecondsSinceEpoch.toString(),
       name: json['name']?.toString() ?? AppConstants.defaultLocationName,
       latitude: (json['latitude'] as num?)?.toDouble() ??
           AppConstants.defaultLatitude,
       longitude: (json['longitude'] as num?)?.toDouble() ??
           AppConstants.defaultLongitude,
+      crop: json['crop']?.toString(),
+      cultivationStartDate: json['cultivationStartDate'] != null
+          ? DateTime.tryParse(json['cultivationStartDate'].toString())
+          : null,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
+    );
+  }
+
+  SavedFarmLocation copyWith({
+    String? id,
+    String? name,
+    double? latitude,
+    double? longitude,
+    String? crop,
+    DateTime? cultivationStartDate,
+    DateTime? createdAt,
+  }) {
+    return SavedFarmLocation(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      crop: crop ?? this.crop,
+      cultivationStartDate: cultivationStartDate ?? this.cultivationStartDate,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
@@ -107,6 +141,57 @@ class SavedFarmLocation {
         longitude: longitude,
         locationName: name,
       );
+}
+
+/// Consolidated isolated storage record for a single farm.
+class FarmRecord {
+  final SavedFarmLocation metadata;
+  final AgriculturalMonitoringData? currentData;
+  final List<AgriculturalMonitoringData> history;
+
+  const FarmRecord({
+    required this.metadata,
+    this.currentData,
+    this.history = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'metadata': metadata.toJson(),
+        'currentData': currentData?.toJson(),
+        'history': history.map((e) => e.toJson()).toList(),
+      };
+
+  factory FarmRecord.fromJson(Map<String, dynamic> json) {
+    final metaJson = json['metadata'] as Map<String, dynamic>? ?? {};
+    final meta = SavedFarmLocation.fromJson(metaJson);
+    final curJson = json['currentData'] as Map<String, dynamic>?;
+    final cur = curJson != null
+        ? AgriculturalMonitoringData.fromJson(curJson)
+        : null;
+    final rawHist = json['history'] as List? ?? [];
+    final hist = rawHist
+        .map((e) =>
+            AgriculturalMonitoringData.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    return FarmRecord(
+      metadata: meta,
+      currentData: cur,
+      history: hist,
+    );
+  }
+
+  FarmRecord copyWith({
+    SavedFarmLocation? metadata,
+    AgriculturalMonitoringData? currentData,
+    List<AgriculturalMonitoringData>? history,
+  }) {
+    return FarmRecord(
+      metadata: metadata ?? this.metadata,
+      currentData: currentData ?? this.currentData,
+      history: history ?? this.history,
+    );
+  }
 }
 
 /// Global User Location Model for custom GPS coordinates.
@@ -260,6 +345,8 @@ class ForecastDayItem {
 class AgriculturalMonitoringData {
   final double latitude;
   final double longitude;
+  final String? farmName;
+  final String? farmId;
   final DateTime generatedAt;
   final Map<String, dynamic> satelliteMetadata;
   final Map<String, List<MonitoringItem>> sections;
@@ -268,6 +355,8 @@ class AgriculturalMonitoringData {
   const AgriculturalMonitoringData({
     required this.latitude,
     required this.longitude,
+    this.farmName,
+    this.farmId,
     required this.generatedAt,
     required this.satelliteMetadata,
     required this.sections,
@@ -283,6 +372,8 @@ class AgriculturalMonitoringData {
     return {
       'latitude': latitude,
       'longitude': longitude,
+      if (farmName != null) 'farmName': farmName,
+      if (farmId != null) 'farmId': farmId,
       'generatedAt': generatedAt.toIso8601String(),
       'satelliteMetadata': satelliteMetadata,
       'sections': sectionsJson,
@@ -309,6 +400,8 @@ class AgriculturalMonitoringData {
     return AgriculturalMonitoringData(
       latitude: (json['latitude'] as num?)?.toDouble() ?? AppConstants.defaultLatitude,
       longitude: (json['longitude'] as num?)?.toDouble() ?? AppConstants.defaultLongitude,
+      farmName: json['farmName']?.toString(),
+      farmId: json['farmId']?.toString(),
       generatedAt:
           DateTime.tryParse(json['generatedAt']?.toString() ?? '') ?? DateTime.now(),
       satelliteMetadata:
@@ -321,15 +414,16 @@ class AgriculturalMonitoringData {
 
 /// Autonomous on-device scientific agricultural telemetry and monitoring service.
 /// Direct integration with Sentinel-2 Level-2A BOA and Open-Meteo / ECMWF IFS.
+/// Enforces STRICT FARM-ID-BASED multi-farm data segregation.
 class AgriculturalMonitoringService {
   AgriculturalMonitoringService._();
   static final AgriculturalMonitoringService instance =
       AgriculturalMonitoringService._();
 
-  static const String _cacheKey = 'farmsense_realtime_monitoring_cache';
-  static const String _userLocationKey = 'farmsense_global_user_location';
+  static const String _farmStoragePrefix = 'farmsense_farm_';
   static const String _savedLocationsKey = 'farmsense_saved_farm_locations_v1';
   static const String _activeLocationIdKey = 'farmsense_active_farm_location_id_v1';
+  static const String _userLocationKey = 'farmsense_global_user_location';
 
   /// Central Reactive Notifier holding all saved farms
   final ValueNotifier<List<SavedFarmLocation>> savedLocationsNotifier =
@@ -365,7 +459,7 @@ class AgriculturalMonitoringService {
     ),
   );
 
-  /// Central Reactive Notifier for Real-time Monitoring Data.
+  /// Central Reactive Notifier for Real-time Monitoring Data of active farm.
   final ValueNotifier<AgriculturalMonitoringData?> globalDataNotifier =
       ValueNotifier<AgriculturalMonitoringData?>(null);
 
@@ -374,19 +468,24 @@ class AgriculturalMonitoringService {
 
   final http.Client _client = http.Client();
   static const Duration _inMemoryTtl = Duration(minutes: 15);
+  static const int _maxHistoricalSnapshots = 30;
 
-  /// Scoped In-Memory Multi-Location Cache Map: "lat_lon" -> (data, timestamp)
+  /// Strict Farm-ID-based In-Memory Caches: key = farmId
   final Map<String, ({AgriculturalMonitoringData data, DateTime time})>
-      _locationMemoryCache = {};
+      _farmCurrentMemoryCache = {};
+  final Map<String, List<AgriculturalMonitoringData>> _farmHistoryMemoryCache = {};
 
+  String get currentFarmId => activeLocationNotifier.value.id;
+  String get currentLocationName => activeLocationNotifier.value.name;
   double get currentLatitude => activeLocationNotifier.value.latitude;
   double get currentLongitude => activeLocationNotifier.value.longitude;
-  String get currentLocationName => activeLocationNotifier.value.name;
+  List<SavedFarmLocation> get allFarms =>
+      List.unmodifiable(savedLocationsNotifier.value);
 
-  String _getScopedCacheKey(double lat, double lon) =>
-      'farmsense_cache_${(lat * 1000).round()}_${(lon * 1000).round()}';
+  String _getFarmStorageKey(String farmId) => '$_farmStoragePrefix$farmId';
 
-  /// Initializes saved farms and active location from persistent storage.
+  /// Initializes saved farms and active location from persistent storage,
+  /// executing clean migration of legacy un-scoped cache keys into farmId partitions.
   Future<void> initSavedLocations() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -428,36 +527,294 @@ class AgriculturalMonitoringService {
 
       activeLocationNotifier.value = active;
       userLocationNotifier.value = active.toUserLocationModel();
+
+      // Clean migration of legacy keys into farmId partition
+      await _migrateLegacyStorage(prefs, loadedList);
     } catch (_) {}
+  }
+
+  /// Migrates legacy identity/coordinate caches to dedicated farmId records.
+  Future<void> _migrateLegacyStorage(
+    SharedPreferences prefs,
+    List<SavedFarmLocation> farms,
+  ) async {
+    final allKeys = prefs.getKeys().toList();
+
+    for (final farm in farms) {
+      final farmKey = _getFarmStorageKey(farm.id);
+      if (!prefs.containsKey(farmKey)) {
+        final oldNameKey = 'farmsense_farm_name_${farm.name.toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_')}';
+        final oldIdKey = 'farmsense_farm_id_${farm.id}';
+        final oldCoordKey = 'farmsense_cache_${(farm.latitude * 1000).round()}_${(farm.longitude * 1000).round()}';
+
+        final candidateJson = prefs.getString(oldIdKey) ??
+            prefs.getString(oldNameKey) ??
+            prefs.getString(oldCoordKey);
+
+        if (candidateJson != null) {
+          try {
+            final data = AgriculturalMonitoringData.fromJson(jsonDecode(candidateJson));
+            final record = FarmRecord(
+              metadata: farm,
+              currentData: data,
+              history: [data],
+            );
+            await prefs.setString(farmKey, jsonEncode(record.toJson()));
+          } catch (_) {}
+        }
+      }
+    }
+
+    // Clean up obsolete legacy cache keys
+    for (final k in allKeys) {
+      if (k.startsWith('farmsense_farm_name_') ||
+          k.startsWith('farmsense_farm_id_') ||
+          k.startsWith('farmsense_cache_') ||
+          k == 'farmsense_realtime_monitoring_cache') {
+        await prefs.remove(k);
+      }
+    }
   }
 
   /// Initializes the user location from persistent storage (backward-compatible).
   Future<void> initUserLocation() async => initSavedLocations();
 
-  /// Saves a new farm location or updates an existing one, making it active and fetching its data.
+  /// Resolves a saved farm location by its unique farmId.
+  SavedFarmLocation? getFarmById(String farmId) {
+    for (final loc in savedLocationsNotifier.value) {
+      if (loc.id == farmId) return loc;
+    }
+    return null;
+  }
+
+  /// Resolves a saved farm location by name (metadata lookup).
+  SavedFarmLocation? getFarmByName(String name) {
+    final clean = name.trim().toLowerCase();
+    for (final loc in savedLocationsNotifier.value) {
+      if (loc.name.trim().toLowerCase() == clean) return loc;
+    }
+    return null;
+  }
+
+  /// Synchronous retrieval of farm data from in-memory cache for a farmId (0ms).
+  AgriculturalMonitoringData? getMemoryDataForFarm(String farmId) {
+    final entry = _farmCurrentMemoryCache[farmId];
+    if (entry != null && DateTime.now().difference(entry.time) < _inMemoryTtl) {
+      return entry.data;
+    }
+    return null;
+  }
+
+  /// Backward-compatible synchronous memory getter by farm name.
+  AgriculturalMonitoringData? getMemoryDataForFarmName(String farmName) {
+    final farm = getFarmByName(farmName);
+    if (farm != null) return getMemoryDataForFarm(farm.id);
+    return null;
+  }
+
+  /// Retrieves current real-time agricultural monitoring data for a specific farmId.
+  /// Strict isolation guarantee: NEVER falls back or returns another farm's data.
+  Future<AgriculturalMonitoringData?> getDataForFarm(
+    String farmId, {
+    bool forceFetch = false,
+  }) async {
+    // 1. In-memory check for this farmId
+    if (!forceFetch) {
+      final mem = _farmCurrentMemoryCache[farmId];
+      if (mem != null && DateTime.now().difference(mem.time) < _inMemoryTtl) {
+        return mem.data;
+      }
+    }
+
+    // 2. Disk partition check for this farmId
+    if (!forceFetch) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final jsonStr = prefs.getString(_getFarmStorageKey(farmId));
+        if (jsonStr != null) {
+          final record = FarmRecord.fromJson(jsonDecode(jsonStr));
+          if (record.currentData != null) {
+            _farmCurrentMemoryCache[farmId] = (
+              data: record.currentData!,
+              time: DateTime.now(),
+            );
+            if (record.history.isNotEmpty) {
+              _farmHistoryMemoryCache[farmId] = record.history;
+            }
+            return record.currentData;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. If missing or forceFetch requested, load farm metadata and fetch live telemetry
+    await initSavedLocations();
+    final farm = getFarmById(farmId);
+    if (farm != null) {
+      return fetchMonitoringData(
+        lat: farm.latitude,
+        lon: farm.longitude,
+        farmId: farm.id,
+        farmName: farm.name,
+      );
+    }
+
+    // Farm does not exist: return null (never return another farm's data)
+    return null;
+  }
+
+  /// Convenience wrapper to retrieve data by farm name (resolves farmId first).
+  Future<AgriculturalMonitoringData?> getDataForFarmName(
+    String farmName, {
+    bool forceFetch = false,
+  }) async {
+    await initSavedLocations();
+    final farm = getFarmByName(farmName);
+    if (farm != null) {
+      return getDataForFarm(farm.id, forceFetch: forceFetch);
+    }
+    return null;
+  }
+
+  /// Saves current agricultural data for a specific farmId into its isolated storage partition.
+  Future<void> saveDataForFarm(String farmId, AgriculturalMonitoringData data) async {
+    await saveFarmSnapshot(farmId, data);
+  }
+
+  /// Saves a new snapshot for a specific farmId, updating current data and historical snapshots.
+  Future<void> saveFarmSnapshot(String farmId, AgriculturalMonitoringData data) async {
+    _farmCurrentMemoryCache[farmId] = (data: data, time: DateTime.now());
+
+    final currentHistory = List<AgriculturalMonitoringData>.from(
+      _farmHistoryMemoryCache[farmId] ?? [],
+    );
+    currentHistory.insert(0, data);
+    if (currentHistory.length > _maxHistoricalSnapshots) {
+      currentHistory.removeRange(_maxHistoricalSnapshots, currentHistory.length);
+    }
+    _farmHistoryMemoryCache[farmId] = currentHistory;
+
+    if (farmId == currentFarmId) {
+      globalDataNotifier.value = data;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final farm = getFarmById(farmId) ??
+          SavedFarmLocation(
+            id: farmId,
+            name: data.farmName ?? currentLocationName,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            createdAt: DateTime.now(),
+          );
+
+      final record = FarmRecord(
+        metadata: farm,
+        currentData: data,
+        history: currentHistory,
+      );
+
+      await prefs.setString(_getFarmStorageKey(farmId), jsonEncode(record.toJson()));
+    } catch (_) {}
+  }
+
+  /// Retrieves the complete historical snapshots for a specific farmId.
+  Future<List<AgriculturalMonitoringData>> getFarmHistory(String farmId) async {
+    final mem = _farmHistoryMemoryCache[farmId];
+    if (mem != null && mem.isNotEmpty) return List.unmodifiable(mem);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_getFarmStorageKey(farmId));
+      if (jsonStr != null) {
+        final record = FarmRecord.fromJson(jsonDecode(jsonStr));
+        _farmHistoryMemoryCache[farmId] = record.history;
+        return List.unmodifiable(record.history);
+      }
+    } catch (_) {}
+
+    return const [];
+  }
+
+  /// Clears cache and historical partition for ONLY the specified farmId.
+  Future<void> clearFarmCache(String farmId) async {
+    _farmCurrentMemoryCache.remove(farmId);
+    _farmHistoryMemoryCache.remove(farmId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_getFarmStorageKey(farmId));
+
+    if (farmId == currentFarmId) {
+      globalDataNotifier.value = null;
+    }
+  }
+
+  /// Backward-compatible alias for clearing by farm name.
+  Future<void> clearCacheForFarmName(String farmName) async {
+    final farm = getFarmByName(farmName);
+    if (farm != null) {
+      await clearFarmCache(farm.id);
+    }
+  }
+
+  /// Clears active farm cache.
+  Future<void> clearCache() async {
+    await clearFarmCache(currentFarmId);
+  }
+
+  /// Clears all caches and historical snapshots across all farms.
+  Future<void> clearAllFarmsCache() async {
+    _farmCurrentMemoryCache.clear();
+    _farmHistoryMemoryCache.clear();
+    final prefs = await SharedPreferences.getInstance();
+    final allKeys = prefs.getKeys().where((k) => k.startsWith(_farmStoragePrefix)).toList();
+    for (final k in allKeys) {
+      await prefs.remove(k);
+    }
+    globalDataNotifier.value = null;
+  }
+
+  /// Saves a new farm location or updates an existing one (keeping stable farmId).
   Future<SavedFarmLocation> saveLocation({
     required String name,
     required double latitude,
     required double longitude,
     String? id,
+    String? crop,
+    DateTime? cultivationStartDate,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final currentList = List<SavedFarmLocation>.from(savedLocationsNotifier.value);
-    final targetId = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final targetId = id ?? 'farm_plot_${DateTime.now().millisecondsSinceEpoch}';
     final cleanName = name.trim().isEmpty
         ? 'Farm (${latitude.toStringAsFixed(3)}°, ${longitude.toStringAsFixed(3)}°)'
         : name.trim();
 
+    final existingIndex = currentList.indexWhere((loc) => loc.id == targetId);
+    final hasExistingRecord = prefs.containsKey(_getFarmStorageKey(targetId)) ||
+        _farmCurrentMemoryCache.containsKey(targetId);
+    final isExisting = existingIndex >= 0 || hasExistingRecord;
+    final isCoordChanged = existingIndex >= 0 &&
+        ((currentList[existingIndex].latitude - latitude).abs() > 0.0001 ||
+            (currentList[existingIndex].longitude - longitude).abs() > 0.0001);
+
+    final inList = existingIndex >= 0;
     final newLocation = SavedFarmLocation(
       id: targetId,
       name: cleanName,
       latitude: double.parse(latitude.toStringAsFixed(5)),
       longitude: double.parse(longitude.toStringAsFixed(5)),
-      createdAt: DateTime.now(),
+      crop: crop ?? (inList ? currentList[existingIndex].crop : null),
+      cultivationStartDate: cultivationStartDate ??
+          (inList
+              ? currentList[existingIndex].cultivationStartDate
+              : null),
+      createdAt: inList
+          ? currentList[existingIndex].createdAt
+          : DateTime.now(),
     );
 
-    final existingIndex = currentList.indexWhere((loc) => loc.id == targetId);
-    if (existingIndex >= 0) {
+    if (inList) {
       currentList[existingIndex] = newLocation;
     } else {
       currentList.add(newLocation);
@@ -473,15 +830,34 @@ class AgriculturalMonitoringService {
         jsonEncode(currentList.map((e) => e.toJson()).toList()),
       );
       await prefs.setString(_activeLocationIdKey, targetId);
-      await prefs.setString(_userLocationKey, jsonEncode(newLocation.toUserLocationModel().toJson()));
+      await prefs.setString(
+        _userLocationKey,
+        jsonEncode(newLocation.toUserLocationModel().toJson()),
+      );
+
+      // Update metadata in FarmRecord on disk if record exists
+      final farmKey = _getFarmStorageKey(targetId);
+      final existingRecordJson = prefs.getString(farmKey);
+      if (existingRecordJson != null) {
+        final existingRecord = FarmRecord.fromJson(jsonDecode(existingRecordJson));
+        final updatedRecord = existingRecord.copyWith(metadata: newLocation);
+        await prefs.setString(farmKey, jsonEncode(updatedRecord.toJson()));
+      }
     } catch (_) {}
 
-    // Fetch and cache data specifically for this location
-    await fetchMonitoringData(lat: newLocation.latitude, lon: newLocation.longitude);
+    // Only fetch fresh telemetry if new farm or coordinates changed or no data exists
+    if (!isExisting || isCoordChanged || getMemoryDataForFarm(targetId) == null) {
+      await fetchMonitoringData(
+        lat: newLocation.latitude,
+        lon: newLocation.longitude,
+        farmId: newLocation.id,
+        farmName: newLocation.name,
+      );
+    }
     return newLocation;
   }
 
-  /// Switches active farm, checking scoped cache for instant (0ms) data loading.
+  /// Switches active farm and loads/fetches data specifically for that farmId.
   Future<AgriculturalMonitoringData?> selectLocation(
     SavedFarmLocation location, {
     bool forceRefresh = false,
@@ -499,10 +875,7 @@ class AgriculturalMonitoringService {
     } catch (_) {}
 
     if (!forceRefresh) {
-      final cached = await getCachedData(
-        targetLat: location.latitude,
-        targetLon: location.longitude,
-      );
+      final cached = await getDataForFarm(location.id);
       if (cached != null) {
         globalDataNotifier.value = cached;
         return cached;
@@ -512,16 +885,21 @@ class AgriculturalMonitoringService {
     return fetchMonitoringData(
       lat: location.latitude,
       lon: location.longitude,
+      farmId: location.id,
+      farmName: location.name,
     );
   }
 
-  /// Deletes a saved farm location (if not the last one remaining).
+  /// Deletes a saved farm location and its isolated storage partition.
   Future<void> deleteLocation(String id) async {
     final currentList = List<SavedFarmLocation>.from(savedLocationsNotifier.value);
     if (currentList.length <= 1) return; // Keep at least one farm
 
     currentList.removeWhere((loc) => loc.id == id);
     savedLocationsNotifier.value = currentList;
+
+    // Delete that farm's dedicated isolated storage partition
+    await clearFarmCache(id);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -534,7 +912,7 @@ class AgriculturalMonitoringService {
     }
   }
 
-  /// Initializes global store and fetches initial data.
+  /// Initializes global store and fetches initial data for active farmId.
   Future<AgriculturalMonitoringData> initializeGlobalStore({
     double? targetLat,
     double? targetLon,
@@ -542,14 +920,22 @@ class AgriculturalMonitoringService {
     double? lon,
   }) async {
     await initSavedLocations();
-    final effectiveLat = targetLat ?? lat ?? currentLatitude;
-    final effectiveLon = targetLon ?? lon ?? currentLongitude;
-    final cached = await getCachedData(targetLat: effectiveLat, targetLon: effectiveLon);
+    final activeLoc = activeLocationNotifier.value;
+    final effectiveLat = targetLat ?? lat ?? activeLoc.latitude;
+    final effectiveLon = targetLon ?? lon ?? activeLoc.longitude;
+
+    final cached = await getDataForFarm(activeLoc.id);
     if (cached != null) return cached;
-    return fetchMonitoringData(lat: effectiveLat, lon: effectiveLon);
+
+    return fetchMonitoringData(
+      lat: effectiveLat,
+      lon: effectiveLon,
+      farmId: activeLoc.id,
+      farmName: activeLoc.name,
+    );
   }
 
-  /// Updates global farm location, persists it, and clears stale cached data.
+  /// Updates global farm location metadata and persists it under active farmId.
   Future<void> updateGlobalLocation({
     double? latitude,
     double? longitude,
@@ -565,54 +951,17 @@ class AgriculturalMonitoringService {
       name: effectiveName,
       latitude: effectiveLat,
       longitude: effectiveLon,
-      id: activeLocationNotifier.value.id,
+      id: currentFarmId,
     );
   }
 
-  /// Retrieves cached monitoring data if coordinates match (with scoped cache support).
+  /// Retrieves cached monitoring data for matching farmId or active farm.
   Future<AgriculturalMonitoringData?> getCachedData({
     double? targetLat,
     double? targetLon,
   }) async {
-    final tLat = targetLat ?? currentLatitude;
-    final tLon = targetLon ?? currentLongitude;
-    final key = _getScopedCacheKey(tLat, tLon);
-
-    // 1. Fast in-memory scoped cache check (0ms)
-    final memoryEntry = _locationMemoryCache[key];
-    if (memoryEntry != null &&
-        DateTime.now().difference(memoryEntry.time) < _inMemoryTtl) {
-      globalDataNotifier.value = memoryEntry.data;
-      return memoryEntry.data;
-    }
-
-    // 2. Disk scoped cache check
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(key) ?? prefs.getString(_cacheKey);
-      if (jsonStr == null) return null;
-      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-      final data = AgriculturalMonitoringData.fromJson(map);
-      if ((data.latitude - tLat).abs() > 0.001 ||
-          (data.longitude - tLon).abs() > 0.001) {
-        return null;
-      }
-      _locationMemoryCache[key] = (data: data, time: DateTime.now());
-      globalDataNotifier.value = data;
-      return data;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Clears cached monitoring data and resets state for current active farm.
-  Future<void> clearCache() async {
-    final key = _getScopedCacheKey(currentLatitude, currentLongitude);
-    _locationMemoryCache.remove(key);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(key);
-    await prefs.remove(_cacheKey);
-    globalDataNotifier.value = null;
+    final activeLoc = activeLocationNotifier.value;
+    return getDataForFarm(activeLoc.id);
   }
 
   /// Fetches real-time agricultural monitoring data.
@@ -624,20 +973,33 @@ class AgriculturalMonitoringService {
   Future<AgriculturalMonitoringData> fetchMonitoringData({
     double? lat,
     double? lon,
+    String? farmId,
+    String? farmName,
     Set<String>? requiredKeys,
   }) async {
-    final targetLat = lat ?? currentLatitude;
-    final targetLon = lon ?? currentLongitude;
+    final targetFarmId = farmId ?? currentFarmId;
+    final farm = getFarmById(targetFarmId);
+    final targetLat = lat ?? farm?.latitude ?? currentLatitude;
+    final targetLon = lon ?? farm?.longitude ?? currentLongitude;
+    final targetFarmName = farmName ?? farm?.name ?? currentLocationName;
     final now = DateTime.now();
 
-    return _fetchAutonomousAgriculturalData(targetLat, targetLon, now);
+    return _fetchAutonomousAgriculturalData(
+      targetLat,
+      targetLon,
+      now,
+      farmId: targetFarmId,
+      farmName: targetFarmName,
+    );
   }
 
   Future<AgriculturalMonitoringData> _fetchAutonomousAgriculturalData(
     double targetLat,
     double targetLon,
-    DateTime now,
-  ) async {
+    DateTime now, {
+    String? farmId,
+    String? farmName,
+  }) async {
     final todayStr = now.toIso8601String().substring(0, 10);
     Map<String, dynamic> weatherData = {};
     List<ForecastDayItem> forecastList = [];
@@ -1355,21 +1717,16 @@ class AgriculturalMonitoringService {
     final finalResult = AgriculturalMonitoringData(
       latitude: targetLat,
       longitude: targetLon,
+      farmName: farmName,
+      farmId: farmId,
       generatedAt: now,
       satelliteMetadata: s2Obs.toJson(),
       sections: freshSections,
       forecast7Day: forecastList,
     );
 
-    final scopedKey = _getScopedCacheKey(targetLat, targetLon);
-    _locationMemoryCache[scopedKey] = (data: finalResult, time: DateTime.now());
-    globalDataNotifier.value = finalResult;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(scopedKey, jsonEncode(finalResult.toJson()));
-      await prefs.setString(_cacheKey, jsonEncode(finalResult.toJson()));
-    } catch (_) {}
+    final effectiveFarmId = farmId ?? currentFarmId;
+    await saveFarmSnapshot(effectiveFarmId, finalResult);
 
     return finalResult;
   }

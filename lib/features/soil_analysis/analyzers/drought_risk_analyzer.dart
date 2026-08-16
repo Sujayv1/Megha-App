@@ -10,13 +10,16 @@ class DroughtRiskAnalyzer {
 
   static AgriculturalCondition analyze({
     required AgriculturalMonitoringData? monitoringData,
-    required CropProfile crop,
-    required CropGrowthStage stage,
+    CropProfile? crop,
+    CropGrowthStage? stage,
+    String? farmName,
   }) {
+    final farmLabel = farmName ?? AgriculturalMonitoringService.instance.currentLocationName;
+
     if (monitoringData == null) {
       return AgriculturalCondition.unavailable(
         title: 'Drought Risk',
-        reason: 'No environmental monitoring telemetry loaded.',
+        reason: 'No environmental monitoring telemetry loaded for $farmLabel.',
       );
     }
 
@@ -32,8 +35,8 @@ class DroughtRiskAnalyzer {
     if (smSurfaceItem == null || smSurfaceItem.value == null || smSurfaceItem.value is! num) {
       return AgriculturalCondition.unavailable(
         title: 'Drought Risk',
-        reason: 'Soil moisture telemetry unavailable for drought risk assessment.',
-        sources: ['ECMWF IFS / Open-Meteo'],
+        reason: 'Soil moisture telemetry unavailable for drought risk assessment at $farmLabel.',
+        sources: const ['ECMWF IFS / Open-Meteo'],
       );
     }
 
@@ -53,21 +56,21 @@ class DroughtRiskAnalyzer {
       status = 'ELEVATED DROUGHT RISK';
       severity = 'HIGH';
       explanation =
-          'Prolonged dry spell detected! Subsurface root reserves are depleted (${(smSubsurface * 100).toStringAsFixed(1)}%) with negligible 7-day rainfall ($rain7d mm) and continuous high evaporative pull ($et0 mm/day).';
+          'Subsurface soil water is critically low at $farmLabel with minimal recent rainfall. Supplemental irrigation is recommended.';
       technicalSummary =
-          'Multi-factor drought signature: Subsurface moisture ($smSubsurface m³/m³) is below critical reserve threshold (0.17), cumulative 7d rainfall is $rain7d mm, and ET0 is $et0 mm/day.';
+          'Subsurface moisture ($smSubsurface m³/m³) is below critical threshold (0.17), cumulative 7d rainfall is $rain7d mm, and ET₀ is $et0 mm/day.';
     } else if (smSurface < AgriculturalThresholds.smDepletionZone && rain7d < 15.0) {
       status = 'MODERATE DROUGHT RISK';
       severity = 'MODERATE';
       explanation =
-          'Mild agricultural dry spell. Topsoil is drying and 7-day precipitation ($rain7d mm) is low. Deep root moisture is sustaining current growth.';
+          'Topsoil is drying out across $farmLabel. Deeper ground moisture is currently sustaining growth, but monitoring is advised.';
       technicalSummary =
-          'Topsoil moisture ($smSurface m³/m³) in depletion zone. 7-day precipitation is $rain7d mm with reference ET0 of $et0 mm/day.';
+          'Topsoil moisture ($smSurface m³/m³) in depletion zone. 7-day precipitation is $rain7d mm with reference ET₀ of $et0 mm/day.';
     } else {
       status = 'LOW DROUGHT RISK';
       severity = 'NONE';
       explanation =
-          'Adequate moisture balance maintained. Soil hydrology reserves are sufficient and no agricultural drought conditions exist.';
+          'Soil moisture reserves are steady and sufficient across $farmLabel with no drought stress signals detected.';
       technicalSummary =
           'Subsurface moisture ($smSubsurface m³/m³) and recent precipitation balance are adequate. Drought risk index is low.';
     }

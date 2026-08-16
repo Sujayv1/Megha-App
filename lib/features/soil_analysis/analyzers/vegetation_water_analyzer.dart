@@ -10,13 +10,16 @@ class VegetationWaterAnalyzer {
 
   static AgriculturalCondition analyze({
     required AgriculturalMonitoringData? monitoringData,
-    required CropProfile crop,
-    required CropGrowthStage stage,
+    CropProfile? crop,
+    CropGrowthStage? stage,
+    String? farmName,
   }) {
+    final farmLabel = farmName ?? AgriculturalMonitoringService.instance.currentLocationName;
+
     if (monitoringData == null) {
       return AgriculturalCondition.unavailable(
         title: 'Vegetation Water Condition',
-        reason: 'No environmental monitoring telemetry loaded.',
+        reason: 'No environmental monitoring telemetry loaded for $farmLabel.',
       );
     }
 
@@ -32,11 +35,11 @@ class VegetationWaterAnalyzer {
     if (!isSatAvailable) {
       final satMeta = monitoringData.satelliteMetadata;
       final reason = satMeta['reason']?.toString() ??
-          'No cloud-free Sentinel-2 pass available to measure optical canopy liquid water absorption (NDWI).';
+          'Satellite optical water index is awaiting a clear pass over $farmLabel.';
       return AgriculturalCondition.unavailable(
         title: 'Vegetation Water Condition',
         reason: reason,
-        sources: ['Sentinel-2 (Copernicus / GEE)'],
+        sources: const ['Sentinel-2 (Copernicus / GEE)'],
       );
     }
 
@@ -59,28 +62,28 @@ class VegetationWaterAnalyzer {
       status = 'OPTIMAL CANOPY HYDRATION';
       severity = 'NONE';
       explanation =
-          'Your ${crop.name} leaf tissue exhibits robust liquid water content. Foliar cellular turgor is healthy.';
+          'Crop leaves and canopy across $farmLabel are well-hydrated with healthy tissue moisture.';
       technicalSummary =
-          'Sentinel-2 NDWI ($ndwi) indicates optimal canopy water thickness. SWIR absorption indicates fully hydrated mesophyll cells.';
+          'Sentinel-2 NDWI ($ndwi) indicates optimal canopy water thickness. SWIR absorption indicates hydrated mesophyll cells.';
     } else if (ndwi < -0.30 && smSurface < 0.18) {
       status = 'SYSTEMIC CANOPY & SOIL DEFICIT';
       severity = 'HIGH';
       explanation =
-          'Both canopy foliage (NDWI: $ndwi) and soil moisture (${(smSurface * 100).toStringAsFixed(1)}%) are deficient. Plants are actively conserving water by closing stomata.';
+          'Both crop leaves and topsoil are dry at $farmLabel. Plants are conserving moisture.';
       technicalSummary =
-          'Coupled canopy-soil water stress: Low NDWI ($ndwi) combined with depleted topsoil moisture ($smSurface m³/m³). Severe vegetative turgor loss.';
+          'Coupled canopy-soil water stress: Low NDWI ($ndwi) combined with depleted topsoil moisture ($smSurface m³/m³).';
     } else if (ndwi < -0.30 && smSurface >= 0.22) {
       status = 'CANOPY TRANSPIRATION STRAIN';
       severity = 'MODERATE';
       explanation =
-          'Soil moisture is adequate (${(smSurface * 100).toStringAsFixed(1)}%), but leaf water content (NDWI: $ndwi) is temporarily strained by high daytime solar/heat demand.';
+          'Leaf hydration is temporarily strained by daytime sun at $farmLabel. Soil moisture will support recovery.';
       technicalSummary =
-          'Canopy-soil decoupling: Low NDWI ($ndwi) despite favorable topsoil moisture ($smSurface m³/m³). Root water uptake rate is lagging peak midday evaporative demand.';
+          'Canopy-soil decoupling: Low NDWI ($ndwi) despite favorable topsoil moisture ($smSurface m³/m³). Transpiration demand is high.';
     } else {
       status = 'MODERATE CANOPY HYDRATION';
       severity = 'LOW';
       explanation =
-          'Canopy water content is within normal operational bounds for ${crop.name} ${stage.stageName}.';
+          'Crop leaf moisture and canopy hydration are balanced across $farmLabel.';
       technicalSummary =
           'NDWI ($ndwi) indicates moderate foliar water content with topsoil moisture at $smSurface m³/m³. Plant water balance is stable.';
     }
@@ -101,8 +104,8 @@ class VegetationWaterAnalyzer {
       supportingMetrics: supporting,
       confidence: confidence,
       sources: const [
-        'Sentinel-2 SWIR/NIR Reflectance (Gao NDWI Index)',
-        'ECMWF IFS Topsoil Hydrology',
+        'Sentinel-2 Band 8 (NIR) & Band 11 (SWIR)',
+        'ECMWF IFS 0-1cm Topsoil Hydrology',
       ],
       isUnavailable: false,
     );

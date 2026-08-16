@@ -10,55 +10,103 @@ import 'agricultural_monitoring_service.dart';
 
 /// Central Agricultural Interpretation Engine.
 /// Converts verified scientific measurements (Sentinel-2, ECMWF, Open-Meteo) into
-/// crop-aware, growth-stage-aware agronomic conditions and farmer-friendly recommendations.
+/// location-aware agronomic conditions and natural farmer-friendly recommendations.
 class AgriculturalInterpretationService {
   AgriculturalInterpretationService._();
 
   static final AgriculturalInterpretationService instance =
       AgriculturalInterpretationService._();
 
-  /// Evaluates full consolidated interpretation report for a crop and growth stage.
-  AgriculturalInterpretation interpret({
-    required AgriculturalMonitoringData? monitoringData,
-    required CropProfile crop,
-    required CropGrowthStage stage,
+  /// Asynchronously evaluates full consolidated interpretation report for any farm by farmId anywhere in the app.
+  Future<AgriculturalInterpretation> interpretForFarm(
+    String farmId, {
+    CropProfile? crop,
+    CropGrowthStage? stage,
     DateTime? cultivationStartDate,
-  }) {
-    // 1. Run all 5 modular analyzers
-    final vegHealth = VegetationHealthAnalyzer.analyze(
+  }) async {
+    final farm = AgriculturalMonitoringService.instance.getFarmById(farmId) ??
+        AgriculturalMonitoringService.instance.getFarmByName(farmId);
+    final effectiveFarmId = farm?.id ?? farmId;
+    final effectiveFarmName = farm?.name ?? farmId;
+
+    final monitoringData = await AgriculturalMonitoringService.instance
+        .getDataForFarm(effectiveFarmId);
+    return interpret(
       monitoringData: monitoringData,
+      farmName: effectiveFarmName,
       crop: crop,
       stage: stage,
+      cultivationStartDate: cultivationStartDate,
+    );
+  }
+
+  /// Backward-compatible alias for querying interpretation by farm name.
+  Future<AgriculturalInterpretation> interpretForFarmName(
+    String farmName, {
+    CropProfile? crop,
+    CropGrowthStage? stage,
+    DateTime? cultivationStartDate,
+  }) =>
+      interpretForFarm(
+        farmName,
+        crop: crop,
+        stage: stage,
+        cultivationStartDate: cultivationStartDate,
+      );
+
+  /// Evaluates full consolidated interpretation report for the active farm location.
+  AgriculturalInterpretation interpret({
+    required AgriculturalMonitoringData? monitoringData,
+    String? farmName,
+    CropProfile? crop,
+    CropGrowthStage? stage,
+    DateTime? cultivationStartDate,
+  }) {
+    final effectiveCrop = crop ?? CropCatalog.maize;
+    final effectiveStage = stage ?? CropCatalog.maize.stages[1];
+    final effectiveFarmName = farmName ?? AgriculturalMonitoringService.instance.currentLocationName;
+
+    // 1. Run all 5 modular analyzers with active farm name
+    final vegHealth = VegetationHealthAnalyzer.analyze(
+      monitoringData: monitoringData,
+      crop: effectiveCrop,
+      stage: effectiveStage,
+      farmName: effectiveFarmName,
     );
 
     final waterStress = WaterStressAnalyzer.analyze(
       monitoringData: monitoringData,
-      crop: crop,
-      stage: stage,
+      crop: effectiveCrop,
+      stage: effectiveStage,
+      farmName: effectiveFarmName,
     );
 
     final heatStress = HeatStressAnalyzer.analyze(
       monitoringData: monitoringData,
-      crop: crop,
-      stage: stage,
+      crop: effectiveCrop,
+      stage: effectiveStage,
+      farmName: effectiveFarmName,
     );
 
     final droughtRisk = DroughtRiskAnalyzer.analyze(
       monitoringData: monitoringData,
-      crop: crop,
-      stage: stage,
+      crop: effectiveCrop,
+      stage: effectiveStage,
+      farmName: effectiveFarmName,
     );
 
     final vegWater = VegetationWaterAnalyzer.analyze(
       monitoringData: monitoringData,
-      crop: crop,
-      stage: stage,
+      crop: effectiveCrop,
+      stage: effectiveStage,
+      farmName: effectiveFarmName,
     );
 
     // 2. Synthesize transparent overall status
     final (overallStatus, overallExplanation) = _synthesizeOverallCondition(
-      crop: crop,
-      stage: stage,
+      farmName: effectiveFarmName,
+      crop: effectiveCrop,
+      stage: effectiveStage,
       vegHealth: vegHealth,
       waterStress: waterStress,
       heatStress: heatStress,
@@ -77,8 +125,8 @@ class AgriculturalInterpretationService {
       overallStatus: overallStatus,
       overallExplanation: overallExplanation,
       overallConfidence: overallConfidence,
-      cropProfile: crop,
-      growthStage: stage,
+      cropProfile: effectiveCrop,
+      growthStage: effectiveStage,
       analyzedAt: DateTime.now(),
       vegetationHealth: vegHealth,
       waterStress: waterStress,
@@ -90,6 +138,7 @@ class AgriculturalInterpretationService {
 
   /// Rule-based synthesis of the overall agricultural condition.
   (String, String) _synthesizeOverallCondition({
+    required String farmName,
     required CropProfile crop,
     required CropGrowthStage stage,
     required AgriculturalCondition vegHealth,
@@ -111,41 +160,41 @@ class AgriculturalInterpretationService {
     if (hasHighWater && hasHighHeat) {
       return (
         'CRITICAL STRESS',
-        'Coupled heat and severe water stress detected for ${crop.name} during the critical ${stage.stageName} stage. Immediate irrigation and crop protection required.'
+        'Severe heat and dry soil are affecting $farmName. Immediate watering and protection are recommended.'
       );
     }
 
     if (hasHighWater || hasHighDrought) {
       return (
         'ATTENTION / WATER DEFICIT',
-        'Soil and canopy water deficits are elevated for ${crop.name} ${stage.stageName}. Supplemental irrigation is advised to protect crop yield potential.'
+        'Water reserves are running low at $farmName. Supplemental irrigation is advised to support steady growth.'
       );
     }
 
     if (hasHighHeat) {
       return (
         'ATTENTION / HEAT STRESS',
-        'Extreme thermal load is currently exceeding ${crop.name} optimal thresholds. Maintain soil hydration to support natural canopy cooling.'
+        'High field temperatures detected at $farmName. Keep soil hydrated to assist natural canopy cooling.'
       );
     }
 
     if (hasPoorVeg) {
       return (
         'POOR CANOPY VIGOR',
-        'Vegetation density is noticeably low for ${stage.stageName}. Inspect field for localized emergence gaps, pests, or nutrient deficiencies.'
+        'Crop canopy density is noticeably sparse across $farmName. Field inspection recommended.'
       );
     }
 
     if (hasModWater || hasModHeat || hasModDrought || hasModVeg) {
       return (
         'MODERATE CONDITION',
-        'Your ${crop.name} is progressing with moderate vigor. Monitor soil moisture depletion and daytime thermal balance closely over the coming days.'
+        'Field conditions are moderate at $farmName. Monitor soil moisture and weather trends over the coming days.'
       );
     }
 
     return (
       'NO MAJOR STRESS SIGNAL DETECTED',
-      'Favorable agronomic conditions: Soil moisture, thermal comfort, and canopy development show no major stress signals for ${crop.name} ${stage.stageName}.'
+      'Field conditions look great at $farmName! Soil moisture, temperature, and crop greenness are well-balanced.'
     );
   }
 

@@ -9,13 +9,16 @@ class HeatStressAnalyzer {
 
   static AgriculturalCondition analyze({
     required AgriculturalMonitoringData? monitoringData,
-    required CropProfile crop,
-    required CropGrowthStage stage,
+    CropProfile? crop,
+    CropGrowthStage? stage,
+    String? farmName,
   }) {
+    final farmLabel = farmName ?? AgriculturalMonitoringService.instance.currentLocationName;
+
     if (monitoringData == null) {
       return AgriculturalCondition.unavailable(
         title: 'Heat Stress',
-        reason: 'No environmental monitoring telemetry loaded.',
+        reason: 'No environmental monitoring telemetry loaded for $farmLabel.',
       );
     }
 
@@ -30,8 +33,8 @@ class HeatStressAnalyzer {
     if (tempItem == null || tempItem.value == null || tempItem.value is! num) {
       return AgriculturalCondition.unavailable(
         title: 'Heat Stress',
-        reason: 'Ambient temperature telemetry unavailable.',
-        sources: ['Open-Meteo Sensor Model'],
+        reason: 'Ambient temperature telemetry unavailable for $farmLabel.',
+        sources: const ['Open-Meteo Sensor Model'],
       );
     }
 
@@ -40,8 +43,8 @@ class HeatStressAnalyzer {
     final lst = lstItem?.value is num ? (lstItem!.value as num).toDouble() : tempCurrent;
     final vpd = vpdItem?.value is num ? (vpdItem!.value as num).toDouble() : 1.2;
 
-    final optMax = stage.optimalTempMax;
-    final heatThreshold = stage.heatStressTempThreshold;
+    final optMax = stage?.optimalTempMax ?? 32.0;
+    final heatThreshold = stage?.heatStressTempThreshold ?? 36.0;
 
     final thermalGradient = lst - tempCurrent; // Positive indicates ground/canopy hotter than air
 
@@ -54,21 +57,21 @@ class HeatStressAnalyzer {
       status = 'HIGH HEAT STRESS';
       severity = 'HIGH';
       explanation =
-          'Severe heat load detected! Daytime temperatures (${tempMax.toStringAsFixed(1)}°C) exceed critical ${crop.name} threshold for the ${stage.stageName} stage. May induce pollen sterility or leaf scorch.';
+          'High daytime heat at $farmLabel. Maintain adequate soil moisture to help crops stay cool and prevent heat stress.';
       technicalSummary =
-          'Max temperature ($tempMax°C) or LST ($lst°C) exceeds critical stage threshold ($heatThreshold°C). VPD is $vpd kPa with thermal gradient +${thermalGradient.toStringAsFixed(1)}°C.';
+          'Max temperature ($tempMax°C) or LST ($lst°C) exceeds critical threshold ($heatThreshold°C). VPD is $vpd kPa with thermal gradient +${thermalGradient.toStringAsFixed(1)}°C.';
     } else if (tempMax > optMax || lst > (optMax + 2.0) || (vpd > 2.5 && tempCurrent > 30.0)) {
       status = 'MODERATE HEAT STRESS';
       severity = 'MODERATE';
       explanation =
-          'Temperatures are above optimal comfort zone for ${crop.name} ${stage.stageName}. Transpiration is elevated; ensure adequate soil water to maintain canopy cooling.';
+          'Temperatures are warmer than average at $farmLabel. Transpiration is elevated; ensure soil does not dry out under peak sun.';
       technicalSummary =
-          'Air temperature ($tempCurrent°C, max $tempMax°C) exceeds optimal range (<$optMax°C). Surface LST is $lst°C. Evaporative cooling is operating.';
+          'Air temperature ($tempCurrent°C, max $tempMax°C) exceeds optimal range (<$optMax°C). Surface LST is $lst°C. Evaporative cooling is active.';
     } else {
       status = 'LOW HEAT STRESS';
       severity = 'NONE';
       explanation =
-          'Thermal conditions (${tempCurrent.toStringAsFixed(1)}°C) are within the ideal physiological range for ${crop.name} ${stage.stageName}.';
+          'Field temperatures and thermal conditions are comfortable and healthy across $farmLabel.';
       technicalSummary =
           'Current temperature ($tempCurrent°C) and surface LST ($lst°C) are within optimal baseline ($optMax°C threshold).';
     }
@@ -77,7 +80,7 @@ class HeatStressAnalyzer {
       'Air Temperature': '$tempCurrent°C',
       'Max Temperature': '$tempMax°C',
       'Land Surface Temp (LST)': '$lst°C',
-      'Optimal Range': '${stage.optimalTempMin}°C - ${stage.optimalTempMax}°C',
+      if (stage != null) 'Optimal Range': '${stage.optimalTempMin}°C - ${stage.optimalTempMax}°C',
       'Critical Threshold': '$heatThreshold°C',
       'VPD': '$vpd kPa',
     };

@@ -8,13 +8,16 @@ class VegetationHealthAnalyzer {
 
   static AgriculturalCondition analyze({
     required AgriculturalMonitoringData? monitoringData,
-    required CropProfile crop,
-    required CropGrowthStage stage,
+    CropProfile? crop,
+    CropGrowthStage? stage,
+    String? farmName,
   }) {
+    final farmLabel = farmName ?? AgriculturalMonitoringService.instance.currentLocationName;
+
     if (monitoringData == null) {
       return AgriculturalCondition.unavailable(
         title: 'Vegetation Health',
-        reason: 'No environmental monitoring telemetry loaded.',
+        reason: 'No environmental monitoring telemetry loaded for $farmLabel.',
       );
     }
 
@@ -28,11 +31,19 @@ class VegetationHealthAnalyzer {
     if (!isSatAvailable) {
       final satMeta = monitoringData.satelliteMetadata;
       final reason = satMeta['reason']?.toString() ??
-          'No cloud-free Sentinel-2 satellite pass available for this coordinate in the lookback window.';
+          'Cloud cover is currently blocking satellite view of $farmLabel. Awaiting next clear pass.';
       return AgriculturalCondition.unavailable(
         title: 'Vegetation Health',
         reason: reason,
-        sources: ['Sentinel-2 (Copernicus / GEE)'],
+        sources: const ['Sentinel-2 (Copernicus / GEE)'],
+      );
+    }
+
+    if (stage != null && stage.expectedNdviMin <= 0.0 && stage.expectedNdviMax <= 0.0) {
+      return AgriculturalCondition.unavailable(
+        title: 'Vegetation Health',
+        reason: 'No calibrated crop growth-stage baseline available for $farmLabel.',
+        sources: const ['Sentinel-2 Multi-Spectral Instrument (10m BOA Reflectance)'],
       );
     }
 
@@ -54,16 +65,8 @@ class VegetationHealthAnalyzer {
       confidence = 'LOW';
     }
 
-    final minExpected = stage.expectedNdviMin;
-    final maxExpected = stage.expectedNdviMax;
-
-    if (minExpected <= 0.0 && maxExpected <= 0.0) {
-      return AgriculturalCondition.unavailable(
-        title: 'Vegetation Health',
-        reason: 'No calibrated crop growth-stage baseline available for ${crop.name} ${stage.stageName}.',
-        sources: const ['Sentinel-2 Multi-Spectral Instrument (10m BOA Reflectance)'],
-      );
-    }
+    final minExpected = stage?.expectedNdviMin ?? 0.40;
+    final maxExpected = stage?.expectedNdviMax ?? 0.75;
 
     final String status;
     final String severity;
@@ -74,39 +77,38 @@ class VegetationHealthAnalyzer {
       status = 'EXCELLENT VIGOR';
       severity = 'NONE';
       explanation =
-          'Your ${crop.name} canopy is exceptionally dense and healthy for the ${stage.stageName} stage.';
+          'Crops across $farmLabel show strong greenness and dense, vigorous canopy growth.';
       technicalSummary =
-          'Observed NDVI ($ndvi) exceeds expected upper baseline ($maxExpected) for ${stage.stageName}. High photosynthetic canopy density.';
+          'Observed NDVI ($ndvi) exceeds upper baseline ($maxExpected). High photosynthetic canopy density.';
     } else if (ndvi >= minExpected) {
       status = 'DEVELOPING NORMALLY';
       severity = 'NONE';
       explanation =
-          'Vegetation greenness and canopy expansion align well with expected ${crop.name} ${stage.stageName} progression.';
+          'Crop greenness and vegetation growth look steady and healthy at $farmLabel.';
       technicalSummary =
-          'Observed NDVI ($ndvi) is within optimal range ($minExpected-$maxExpected) for ${stage.stageName}. Chlorophyll absorption is active.';
+          'Observed NDVI ($ndvi) is within optimal range ($minExpected-$maxExpected). Chlorophyll absorption is active.';
     } else if (ndvi >= minExpected - 0.12) {
       status = 'MODERATE / SLIGHT DEFICIT';
       severity = 'MODERATE';
       explanation =
-          'Canopy greenness is slightly below expected baseline for ${crop.name} ${stage.stageName}. Growth may be delayed or patchy.';
+          'Canopy greenness is slightly low in parts of $farmLabel. Check field for localized moisture or nutrient needs.';
       technicalSummary =
-          'Observed NDVI ($ndvi) is below expected minimum ($minExpected) for ${stage.stageName}. Potential delayed emergence, nutrient deficit, or moisture limitation.';
+          'Observed NDVI ($ndvi) is below expected minimum ($minExpected). Potential delayed emergence, nutrient deficit, or moisture limitation.';
     } else {
       status = 'POOR VIGOR / THIN CANOPY';
       severity = 'HIGH';
       explanation =
-          'Canopy density is noticeably low for ${stage.stageName}. Crop may be experiencing substantial abiotic stress, disease, or emergence failure.';
+          'Vegetation density is noticeably thin at $farmLabel. Field inspection recommended to check crop emergence or stress.';
       technicalSummary =
           'Observed NDVI ($ndvi) is substantially below threshold ($minExpected). Sparse vegetation cover or biomass loss detected.';
     }
 
     final supporting = <String, String>{
-      'NDVI': ndvi.toStringAsFixed(2),
-      'Expected NDVI': '$minExpected - $maxExpected',
-      if (ndre != null) 'NDRE': ndre.toStringAsFixed(2),
-      if (evi != null) 'EVI': evi.toStringAsFixed(2),
-      'Observation Age': '$dataAge days ago',
-      'Cloud Cover': '${cloudPct.toStringAsFixed(1)}%',
+      'NDVI': ndvi.toStringAsFixed(3),
+      if (ndre != null) 'NDRE (Red-Edge)': ndre.toStringAsFixed(3),
+      if (evi != null) 'EVI': evi.toStringAsFixed(3),
+      'Observation Freshness': '$dataAge days ago',
+      'Scene Cloud Cover': '$cloudPct%',
     };
 
     return AgriculturalCondition(
@@ -119,7 +121,7 @@ class VegetationHealthAnalyzer {
       confidence: confidence,
       sources: const [
         'Sentinel-2 Multi-Spectral Instrument (10m BOA Reflectance)',
-        'Copernicus / Google Earth Engine',
+        'Google Earth Engine Planetary Catalog',
       ],
       isUnavailable: false,
     );

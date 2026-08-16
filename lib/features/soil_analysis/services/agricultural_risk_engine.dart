@@ -182,7 +182,7 @@ class AgriculturalRiskEngine {
       );
     }
 
-    final tAir = airTemp ?? tempMax!;
+    final tAir = airTemp ?? tempMax ?? lst!;
     final tMax = tempMax ?? tAir;
     final lstVal = lst; // Kept nullable, never fabricated.
     final vpdVal = vpd ?? 1.2;

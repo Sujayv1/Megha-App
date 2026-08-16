@@ -36,23 +36,23 @@ class Sentinel2Observation {
   });
 
   Map<String, dynamic> toJson() => {
-        'available': available,
-        'reason': reason,
-        'source': source,
-        'product': product,
-        'observation_date': observationDate,
-        'data_age_days': dataAgeDays,
-        'cloud_percentage': cloudPercentage,
-        'spatial_resolution': spatialResolution,
-        'bands': {
-          'B2_blue': b2,
-          'B3_green': b3,
-          'B4_red': b4,
-          'B5_red_edge': b5,
-          'B8_nir': b8,
-          'B11_swir': b11,
-        },
-      };
+    'available': available,
+    'reason': reason,
+    'source': source,
+    'product': product,
+    'observation_date': observationDate,
+    'data_age_days': dataAgeDays,
+    'cloud_percentage': cloudPercentage,
+    'spatial_resolution': spatialResolution,
+    'bands': {
+      'B2_blue': b2,
+      'B3_green': b3,
+      'B4_red': b4,
+      'B5_red_edge': b5,
+      'B8_nir': b8,
+      'B11_swir': b11,
+    },
+  };
 
   factory Sentinel2Observation.fromJson(Map<String, dynamic> json) {
     final bands = json['bands'] as Map<String, dynamic>? ?? {};
@@ -142,8 +142,10 @@ class Sentinel2ObservationService {
     double maxCloudPercent = 35.0,
   }) async {
     final now = DateTime.now();
-    final startDate =
-        now.subtract(Duration(days: lookbackDays)).toIso8601String().substring(0, 10);
+    final startDate = now
+        .subtract(Duration(days: lookbackDays))
+        .toIso8601String()
+        .substring(0, 10);
     final endDate = now.toIso8601String().substring(0, 10);
 
     try {
@@ -162,7 +164,7 @@ class Sentinel2ObservationService {
         },
         'limit': 1,
         'sortby': [
-          {'field': 'properties.datetime', 'direction': 'desc'}
+          {'field': 'properties.datetime', 'direction': 'desc'},
         ],
       });
 
@@ -180,7 +182,8 @@ class Sentinel2ObservationService {
 
         if (features.isNotEmpty) {
           final feature = features.first as Map<String, dynamic>;
-          final properties = feature['properties'] as Map<String, dynamic>? ?? {};
+          final properties =
+              feature['properties'] as Map<String, dynamic>? ?? {};
           final dtStr = (properties['datetime'] as String?) ?? endDate;
           final cloud =
               (properties['eo:cloud_cover'] as num?)?.toDouble() ?? 0.0;
@@ -192,7 +195,9 @@ class Sentinel2ObservationService {
             available: true,
             source: 'Sentinel-2 MSI Level-2A (Copernicus / ESA)',
             product: 'COPERNICUS/S2_SR_HARMONIZED (BOA Reflectance)',
-            observationDate: dtStr.length >= 10 ? dtStr.substring(0, 10) : dtStr,
+            observationDate: dtStr.length >= 10
+                ? dtStr.substring(0, 10)
+                : dtStr,
             dataAgeDays: ageDays,
             cloudPercentage: double.parse(cloud.toStringAsFixed(1)),
             spatialResolution: '10 m',

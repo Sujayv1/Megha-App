@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/agricultural_condition.dart';
 import '../models/agricultural_interpretation.dart';
@@ -26,8 +25,8 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   bool _isLoading = false;
   AgriculturalMonitoringData? _data;
 
-  CropProfile _selectedCrop = CropCatalog.maize;
-  late CropGrowthStage _selectedStage =
+  final CropProfile _selectedCrop = CropCatalog.maize;
+  final CropGrowthStage _selectedStage =
       CropCatalog.maize.stages[1]; // Vegetative by default
 
   // Memoized sort result — computed once per data load, not on every build().
@@ -51,6 +50,9 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     AgriculturalMonitoringService.instance.globalLocationNotifier.addListener(
       _onGlobalDataChanged,
     );
+    AgriculturalMonitoringService.instance.activeLocationNotifier.addListener(
+      _onGlobalDataChanged,
+    );
     _loadInitialData();
   }
 
@@ -60,6 +62,8 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
       _onGlobalDataChanged,
     );
     AgriculturalMonitoringService.instance.globalLocationNotifier
+        .removeListener(_onGlobalDataChanged);
+    AgriculturalMonitoringService.instance.activeLocationNotifier
         .removeListener(_onGlobalDataChanged);
     _refreshRotationController.dispose();
     super.dispose();
@@ -83,12 +87,12 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   }
 
   Future<void> _loadInitialData() async {
-    final data = await AgriculturalMonitoringService.instance
-        .initializeGlobalStore(
-          lat: AppConstants.defaultLatitude,
-          lon: AppConstants.defaultLongitude,
-        );
-    if (mounted) {
+    final activeLoc =
+        AgriculturalMonitoringService.instance.activeLocationNotifier.value;
+    final data = await AgriculturalMonitoringService.instance.getDataForFarm(
+      activeLoc.id,
+    );
+    if (mounted && data != null) {
       setState(() {
         _data = data;
         final rawSections = data.sections;
@@ -110,15 +114,17 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     _refreshRotationController.repeat();
 
     try {
-      // Force clear old cached data from SharedPreferences to fetch fresh data
-      await AgriculturalMonitoringService.instance.clearCache();
+      final activeLoc =
+          AgriculturalMonitoringService.instance.activeLocationNotifier.value;
 
       final results = await Future.wait([
         AgriculturalMonitoringService.instance.fetchMonitoringData(
-          lat: AgriculturalMonitoringService.instance.currentLatitude,
-          lon: AgriculturalMonitoringService.instance.currentLongitude,
+          lat: activeLoc.latitude,
+          lon: activeLoc.longitude,
+          farmName: activeLoc.name,
+          farmId: activeLoc.id,
         ),
-        Future.delayed(const Duration(milliseconds: 2500)),
+        Future.delayed(const Duration(milliseconds: 1500)),
       ]);
       final fresh = results[0] as AgriculturalMonitoringData;
 
@@ -156,7 +162,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Live GEE & Open-Meteo synced at $timeStr',
+                  '${activeLoc.name} synced at $timeStr',
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -283,7 +289,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
 
   Widget _buildAppBar(TextTheme textTheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -311,7 +317,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
               Text(
                 'Real-Time Data',
                 style: GoogleFonts.poppins(
-                  fontSize: 23,
+                  fontSize: 22,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
                 ),
@@ -348,7 +354,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
 
   Widget _buildSegmentedTabToggle() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(15, 0, 15, 4),
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
@@ -363,7 +369,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
                 onTap: () => setState(() => _selectedTab = 0),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: _selectedTab == 0
                         ? AppColors.leafGreen
@@ -403,7 +409,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
                 onTap: () => setState(() => _selectedTab = 1),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: _selectedTab == 1
                         ? AppColors.leafGreen
@@ -444,273 +450,35 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     );
   }
 
-  // ─── FARMER VIEW (AGRICULTURAL INTERPRETATION & CONDITIONS) ─────────────────
+  // ─── FARMER VIEW (SINGLE UNIFIED AGRICULTURAL HEALTH HUB) ─────────────────
   Widget _buildFarmerView(TextTheme textTheme) {
+    final activeLocation =
+        AgriculturalMonitoringService.instance.currentLocationName;
     final interpretation = AgriculturalInterpretationService.instance.interpret(
       monitoringData: _data,
+      farmName: activeLocation,
       crop: _selectedCrop,
       stage: _selectedStage,
-    );
-
-    final secWeather = _data?.sections['1_weather_and_atmosphere'] ?? [];
-    final secSoil = _data?.sections['3_soil_and_water'] ?? [];
-
-    final temp = _getItemValue(secWeather, IndicatorKeys.temp, '27.5');
-    final humidity = _getItemValue(secWeather, IndicatorKeys.humidity, '68');
-    final rain = _getItemValue(secWeather, IndicatorKeys.rain24h, '0.0');
-
-    final surfaceMoisture = _parseNum(
-      _getItemValue(secSoil, IndicatorKeys.smSurface, '0.22'),
-    );
-    final rootMoisture = _parseNum(
-      _getItemValue(secSoil, IndicatorKeys.smRoot, '0.25'),
     );
 
     return SingleChildScrollView(
       key: const ValueKey('farmer_view'),
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 1. Saved Farm Location Switcher
           FarmLocationSelectorBar(onLocationChanged: _refreshData),
 
-          // 2. CROP & GROWTH STAGE SELECTOR
-          _buildCropStageSelectorCard(textTheme),
+          const SizedBox(height: 8),
 
-          const SizedBox(height: 14),
-
-          // 2. CONSOLIDATED AGRICULTURAL CONDITION SUMMARY
-          _buildOverallConditionSummaryCard(interpretation, textTheme),
-
-          const SizedBox(height: 18),
-
-          // Section Title: Detailed Agricultural Conditions
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.psychology_rounded,
-                  color: AppColors.leafGreen,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'AGRICULTURAL INTERPRETATION',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // 3. VEGETATION HEALTH CARD
-          _buildInterpretationConditionCard(
-            interpretation.vegetationHealth,
-            Icons.eco_rounded,
-            const Color(0xFF10B981),
+          // 2. THE UNIFIED FARM HEALTH HUB (ALL 5 CONDITIONS IN A SINGLE CONTAINER)
+          _buildUnifiedFarmHealthContainer(
+            interpretation,
+            activeLocation,
             textTheme,
           ),
-
-          const SizedBox(height: 12),
-
-          // 4. WATER STRESS CARD
-          _buildInterpretationConditionCard(
-            interpretation.waterStress,
-            Icons.water_drop_rounded,
-            const Color(0xFF0EA5E9),
-            textTheme,
-          ),
-
-          const SizedBox(height: 12),
-
-          // 5. HEAT STRESS CARD
-          _buildInterpretationConditionCard(
-            interpretation.heatStress,
-            Icons.thermostat_rounded,
-            const Color(0xFFF97316),
-            textTheme,
-          ),
-
-          const SizedBox(height: 12),
-
-          // 6. DROUGHT RISK CARD
-          _buildInterpretationConditionCard(
-            interpretation.droughtRisk,
-            Icons.wb_sunny_rounded,
-            const Color(0xFFEAB308),
-            textTheme,
-          ),
-
-          const SizedBox(height: 12),
-
-          // 7. VEGETATION WATER CONDITION CARD
-          _buildInterpretationConditionCard(
-            interpretation.vegetationWaterCondition,
-            Icons.opacity_rounded,
-            const Color(0xFF06B6D4),
-            textTheme,
-          ),
-
-          const SizedBox(height: 20),
-
-          // Section Title: Live Environmental Telemetry
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.sensors_rounded,
-                  color: AppColors.leafGreen,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'LIVE ENVIRONMENTAL TELEMETRY',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // 8. TODAY WEATHER CARD
-          GlassCard(
-            padding: const EdgeInsets.all(18),
-            borderRadius: 22,
-            borderColor: AppColors.leafGreen.withValues(alpha: 0.25),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.cloud_sync_rounded,
-                          color: AppColors.leafGreen,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'TODAY WEATHER',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                            color: AppColors.textPrimary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      'ECMWF / Open-Meteo',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildWeatherChip(
-                      Icons.thermostat_rounded,
-                      const Color(0xFFEF4444),
-                      'Temp',
-                      '$temp°C',
-                    ),
-                    _buildWeatherChip(
-                      Icons.water_drop_rounded,
-                      const Color(0xFF0EA5E9),
-                      'Humidity',
-                      '$humidity%',
-                    ),
-                    _buildWeatherChip(
-                      Icons.umbrella_rounded,
-                      const Color(0xFF0284C7),
-                      'Rain',
-                      '$rain mm',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ).animate().fadeIn(delay: 100.ms, duration: 350.ms),
-
-          const SizedBox(height: 14),
-
-          // 9. SOIL & WATER MOISTURE CARD
-          GlassCard(
-            padding: const EdgeInsets.all(18),
-            borderRadius: 22,
-            borderColor: AppColors.leafGreen.withValues(alpha: 0.25),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.water_rounded,
-                          color: AppColors.leafGreen,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'SOIL & WATER MOISTURE',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                            color: AppColors.textPrimary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      'ECMWF IFS (0-1 & 9-27cm)',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildSoilMoistureBar(
-                  Icons.layers_rounded,
-                  'Topsoil Moisture (0-1cm)',
-                  (surfaceMoisture * 100).round(),
-                ),
-                const SizedBox(height: 14),
-                _buildSoilMoistureBar(
-                  Icons.grass_rounded,
-                  'Subsurface Moisture (9-27cm)',
-                  (rootMoisture * 100).round(),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(delay: 200.ms, duration: 350.ms),
 
           const SizedBox(height: 24),
         ],
@@ -718,46 +486,218 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     );
   }
 
-  /// Crop & Growth Stage interactive selector card.
-  Widget _buildCropStageSelectorCard(TextTheme textTheme) {
+  /// Single Unified Container displaying all 5 agricultural conditions with rich visual cards and zero progress bars.
+  Widget _buildUnifiedFarmHealthContainer(
+    AgriculturalInterpretation interp,
+    String farmName,
+    TextTheme textTheme,
+  ) {
+    final conditions = [
+      (
+        interp.vegetationHealth,
+        Icons.eco_rounded,
+        const Color(0xFF10B981),
+        'Vegetation Health',
+      ),
+      (
+        interp.waterStress,
+        Icons.water_drop_rounded,
+        const Color(0xFF0EA5E9),
+        'Water Stress',
+      ),
+      (
+        interp.heatStress,
+        Icons.thermostat_rounded,
+        const Color(0xFFF97316),
+        'Heat Stress',
+      ),
+      (
+        interp.droughtRisk,
+        Icons.wb_sunny_rounded,
+        const Color(0xFFEAB308),
+        'Drought Risk',
+      ),
+      (
+        interp.vegetationWaterCondition,
+        Icons.opacity_rounded,
+        const Color(0xFF06B6D4),
+        'Vegetation Water',
+      ),
+    ];
+
+    final riskItems = conditions.where((item) {
+      final c = item.$1;
+      return !c.isUnavailable &&
+          (c.severity == 'HIGH' ||
+              c.severity == 'CRITICAL' ||
+              c.severity == 'MODERATE');
+    }).toList();
+
+    final hasCritical = riskItems.any(
+      (item) => item.$1.severity == 'HIGH' || item.$1.severity == 'CRITICAL',
+    );
+
+    final Color statusColor;
+    final IconData statusIcon;
+    final String bannerTitle;
+
+    if (hasCritical) {
+      statusColor = const Color(0xFFEF4444);
+      statusIcon = Icons.warning_amber_rounded;
+      bannerTitle =
+          '${riskItems.length} Urgent Risk Alert${riskItems.length > 1 ? 's' : ''}';
+    } else if (riskItems.isNotEmpty) {
+      statusColor = const Color(0xFFD97706);
+      statusIcon = Icons.priority_high_rounded;
+      bannerTitle =
+          '${riskItems.length} Condition${riskItems.length > 1 ? 's' : ''} Under Watch';
+    } else {
+      statusColor = AppColors.leafGreen;
+      statusIcon = Icons.check_circle_rounded;
+      bannerTitle = 'All 5 Conditions Optimal & Safe';
+    }
+
     return GlassCard(
-      padding: const EdgeInsets.all(16),
-      borderRadius: 22,
-      borderColor: AppColors.leafGreen.withValues(alpha: 0.28),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 16),
+      borderRadius: 24,
+      borderColor: statusColor.withValues(alpha: 0.35),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ─── HUB HEADER: SINGLE LINE ICON & TITLE ──────────────────────────
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.45),
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(statusIcon, color: statusColor, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  bannerTitle,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ─── ACTIVE RISKS ALERT BANNER (IF ANY RISKS EXIST) ───────────────
+          if (riskItems.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.35),
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
                 children: [
-                  const Icon(
-                    Icons.agriculture_rounded,
-                    color: AppColors.leafGreen,
-                    size: 19,
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: statusColor,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'Active Crop Profile',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13.5,
-                      color: AppColors.textPrimary,
+                  Expanded(
+                    child: Text(
+                      'Action advised: ${riskItems.map((r) => r.$4).join(', ')} require monitoring.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                      softWrap: true,
                     ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          const Divider(color: Colors.black12, height: 1),
+          const SizedBox(height: 8),
+
+          // ─── THE 5 VISUAL CONDITION TILES (ZERO PROGRESS BARS) ────────────
+          ...conditions.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final item = entry.value;
+            final condition = item.$1;
+            final icon = item.$2;
+            final accentColor = item.$3;
+            final customTitle = item.$4;
+
+            final isLast = idx == conditions.length - 1;
+
+            return Column(
+              children: [
+                _buildVisualConditionTile(
+                  context: context,
+                  condition: condition,
+                  icon: icon,
+                  accentColor: accentColor,
+                  displayTitle: customTitle,
+                ),
+                if (!isLast) const SizedBox(height: 10),
+              ],
+            );
+          }),
+
+          const SizedBox(height: 8),
+          const Divider(color: Colors.black12, height: 1),
+          const SizedBox(height: 10),
+
+          // ─── CONTAINER FOOTER: DATA PROVENANCE ────────────────────────────
+          Row(
+            children: [
+              const Icon(
+                Icons.satellite_alt_rounded,
+                size: 13,
+                color: AppColors.textMuted,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Sentinel-2 (10m BOA) • ECMWF IFS • Open-Meteo',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  softWrap: true,
+                ),
+              ),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: AppColors.leafGreen.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  _selectedCrop.category,
+                  'Live Feed',
                   style: GoogleFonts.poppins(
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w800,
                     color: AppColors.leafGreen,
                   ),
@@ -765,268 +705,19 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
               ),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Crop selector chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: CropCatalog.allCrops.map((c) {
-                final isSelected = c.id == _selectedCrop.id;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: InkWell(
-                    onTap: () {
-                      if (_selectedCrop.id != c.id) {
-                        setState(() {
-                          _selectedCrop = c;
-                          _selectedStage = c.stages.firstWhere(
-                            (s) => s.stageIndex == 1,
-                            orElse: () => c.stages.first,
-                          );
-                        });
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.leafGreen
-                            : Colors.black.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.leafGreen
-                              : Colors.black12,
-                        ),
-                      ),
-                      child: Text(
-                        c.name,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11.5,
-                          fontWeight: isSelected
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          const Divider(color: Colors.black12, height: 1),
-          const SizedBox(height: 10),
-
-          // Growth Stage Selector
-          Row(
-            children: [
-              Text(
-                'Growth Stage: ',
-                style: GoogleFonts.poppins(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  child: Row(
-                    children: _selectedCrop.stages.map((stg) {
-                      final isStageSelected =
-                          stg.stageIndex == _selectedStage.stageIndex;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: InkWell(
-                          onTap: () {
-                            if (_selectedStage.stageIndex != stg.stageIndex) {
-                              setState(() {
-                                _selectedStage = stg;
-                              });
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isStageSelected
-                                  ? const Color(0xFF065F46)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isStageSelected
-                                    ? const Color(0xFF065F46)
-                                    : Colors.black12,
-                              ),
-                            ),
-                            child: Text(
-                              stg.stageName,
-                              style: GoogleFonts.poppins(
-                                fontSize: 10.5,
-                                fontWeight: isStageSelected
-                                    ? FontWeight.w800
-                                    : FontWeight.w500,
-                                color: isStageSelected
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 300.ms);
-  }
-
-  /// Overall Farm Condition Summary Card
-  Widget _buildOverallConditionSummaryCard(
-    AgriculturalInterpretation interp,
-    TextTheme textTheme,
-  ) {
-    final status = interp.overallStatus;
-    final isCritical = status.contains('CRITICAL') || status.contains('POOR');
-    final isAttention = status.contains('ATTENTION');
-    final isModerate = status.contains('MODERATE');
-
-    final Color statusColor;
-    final IconData statusIcon;
-
-    if (isCritical) {
-      statusColor = const Color(0xFFEF4444);
-      statusIcon = Icons.warning_amber_rounded;
-    } else if (isAttention) {
-      statusColor = const Color(0xFFF97316);
-      statusIcon = Icons.priority_high_rounded;
-    } else if (isModerate) {
-      statusColor = const Color(0xFFD97706);
-      statusIcon = Icons.info_outline_rounded;
-    } else {
-      statusColor = AppColors.leafGreen;
-      statusIcon = Icons.check_circle_rounded;
-    }
-
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
-      borderRadius: 22,
-      borderColor: statusColor.withValues(alpha: 0.35),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: statusColor.withValues(alpha: 0.4),
-                width: 1.5,
-              ),
-            ),
-            child: Icon(statusIcon, color: statusColor, size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    Text(
-                      'Farm Condition:',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        status,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 10.5,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Confidence: ${interp.overallConfidence}',
-                        style: GoogleFonts.poppins(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  interp.overallExplanation,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     ).animate().fadeIn(duration: 350.ms);
   }
 
-  /// Reusable Card for each Agricultural Condition Dimension.
-  Widget _buildInterpretationConditionCard(
-    AgriculturalCondition condition,
-    IconData icon,
-    Color accentColor,
-    TextTheme textTheme,
-  ) {
+  /// Pure Visual Card for each condition (Rich Status Tile with NO progress bars).
+  Widget _buildVisualConditionTile({
+    required BuildContext context,
+    required AgriculturalCondition condition,
+    required IconData icon,
+    required Color accentColor,
+    required String displayTitle,
+  }) {
     final isUnavail = condition.isUnavailable;
     final isHigh =
         condition.severity == 'HIGH' || condition.severity == 'CRITICAL';
@@ -1043,145 +734,285 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
       badgeColor = AppColors.leafGreen;
     }
 
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      borderRadius: 20,
-      borderColor: isUnavail
-          ? Colors.black12
-          : accentColor.withValues(alpha: 0.25),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
+    final visualTag = _getVisualActionTag(condition);
+
+    return InkWell(
+      onTap: () =>
+          _showAnalyticsBottomSheet(context, condition, icon, accentColor),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: (isHigh || isMod)
+              ? badgeColor.withValues(alpha: 0.05)
+              : Colors.white.withValues(alpha: 0.70),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: (isHigh || isMod)
+                ? badgeColor.withValues(alpha: 0.30)
+                : Colors.black.withValues(alpha: 0.06),
+            width: isHigh || isMod ? 1.4 : 1.0,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Row 1: Icon + Title + Status Pill (e.g. "Vegetation Health       OPTIMAL")
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.25),
                     ),
-                    child: Icon(icon, color: accentColor, size: 18),
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    condition.title,
+                  child: Icon(icon, color: accentColor, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    displayTitle,
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w800,
-                      fontSize: 13.5,
+                      fontSize: 14,
                       color: AppColors.textPrimary,
                     ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: badgeColor.withValues(alpha: 0.35)),
-                ),
-                child: Text(
-                  condition.status,
-                  style: GoogleFonts.poppins(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: badgeColor,
+                    softWrap: true,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Farmer-Friendly Explanation
-          Text(
-            condition.explanation,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-              height: 1.4,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-
-          if (condition.supportingMetrics.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: condition.supportingMetrics.entries.map((e) {
-                return Container(
+                const SizedBox(width: 8),
+                Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
+                    horizontal: 9,
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.04),
+                    color: badgeColor.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.black12),
+                    border: Border.all(
+                      color: badgeColor.withValues(alpha: 0.35),
+                    ),
                   ),
-                  child: RichText(
-                    text: TextSpan(
+                  child: Text(
+                    condition.status,
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                      color: badgeColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Row 2: Full-text Action Tag Strip & Analytics Button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: visualTag.$3.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(visualTag.$1, size: 15, color: visualTag.$3),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      visualTag.$2,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: visualTag.$3,
+                      ),
+                      softWrap: true,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: visualTag.$3.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextSpan(
-                          text: '${e.key}: ',
-                          style: GoogleFonts.poppins(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                        TextSpan(
-                          text: e.value,
+                        Text(
+                          'Analytics',
                           style: GoogleFonts.poppins(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textPrimary,
                           ),
                         ),
+                        const SizedBox(width: 3),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 8.5,
+                          color: AppColors.textSecondary,
+                        ),
                       ],
                     ),
                   ),
-                );
-              }).toList(),
+                ],
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
 
-          if (condition.sources.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            const Divider(color: Colors.black12, height: 1),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    condition.sources.first,
-                    style: GoogleFonts.poppins(
-                      fontSize: 9.5,
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  'Confidence: ${condition.confidence}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
+  /// Helper to generate concise visual status tags and icons for farmer view.
+  (IconData, String, Color) _getVisualActionTag(
+    AgriculturalCondition condition,
+  ) {
+    if (condition.isUnavailable) {
+      return (
+        Icons.sync_rounded,
+        'Satellite Pass Pending',
+        const Color(0xFF6B7280),
+      );
+    }
+    final title = condition.title.toLowerCase();
+    final isHigh =
+        condition.severity == 'HIGH' || condition.severity == 'CRITICAL';
+    final isMod = condition.severity == 'MODERATE';
+
+    if (title.contains('vegetation health') || title.contains('vigor')) {
+      if (isHigh) {
+        return (
+          Icons.warning_amber_rounded,
+          'Thin Foliage Cover',
+          const Color(0xFFEF4444),
+        );
+      }
+      if (isMod) {
+        return (
+          Icons.info_outline_rounded,
+          'Slight Growth Deficit',
+          const Color(0xFFD97706),
+        );
+      }
+      return (
+        Icons.check_circle_rounded,
+        'Vigorous & Dense Canopy',
+        AppColors.leafGreen,
+      );
+    }
+    if (title.contains('water stress')) {
+      if (isHigh) {
+        return (
+          Icons.water_drop_rounded,
+          'Irrigation Recommended',
+          const Color(0xFFEF4444),
+        );
+      }
+      if (isMod) {
+        return (
+          Icons.water_rounded,
+          'Soil Moisture Dipping',
+          const Color(0xFFD97706),
+        );
+      }
+      return (
+        Icons.check_circle_rounded,
+        'Adequate Soil Moisture',
+        AppColors.leafGreen,
+      );
+    }
+    if (title.contains('heat stress')) {
+      if (isHigh) {
+        return (
+          Icons.local_fire_department_rounded,
+          'High Thermal Load',
+          const Color(0xFFEF4444),
+        );
+      }
+      if (isMod) {
+        return (
+          Icons.wb_sunny_rounded,
+          'Elevated Daytime Sun',
+          const Color(0xFFD97706),
+        );
+      }
+      return (
+        Icons.check_circle_rounded,
+        'Comfortable Temperature',
+        AppColors.leafGreen,
+      );
+    }
+    if (title.contains('drought')) {
+      if (isHigh) {
+        return (
+          Icons.terrain_rounded,
+          'Subsurface Depleted',
+          const Color(0xFFEF4444),
+        );
+      }
+      if (isMod) {
+        return (
+          Icons.wb_twilight_rounded,
+          'Dry Spell Alert',
+          const Color(0xFFD97706),
+        );
+      }
+      return (
+        Icons.check_circle_rounded,
+        'Stable Water Reserves',
+        AppColors.leafGreen,
+      );
+    }
+    // Vegetation Water Condition
+    if (isHigh) {
+      return (
+        Icons.opacity_rounded,
+        'Foliar Moisture Deficit',
+        const Color(0xFFEF4444),
+      );
+    }
+    if (isMod) {
+      return (
+        Icons.waves_rounded,
+        'Transpiration Strain',
+        const Color(0xFFD97706),
+      );
+    }
+    return (
+      Icons.check_circle_rounded,
+      'Hydrated Leaf Turgor',
+      AppColors.leafGreen,
+    );
+  }
+
+  /// Displays the full fluid analytics sheet for an agricultural condition.
+  void _showAnalyticsBottomSheet(
+    BuildContext context,
+    AgriculturalCondition condition,
+    IconData icon,
+    Color accentColor,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (ctx) => _ConditionAnalyticsSheet(
+        condition: condition,
+        icon: icon,
+        accentColor: accentColor,
       ),
     );
   }
@@ -1206,7 +1037,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     return SingleChildScrollView(
       key: const ValueKey('technical_view'),
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2020,103 +1851,6 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     return months[(m - 1).clamp(0, 11)];
   }
 
-  // Helper UI Widgets for Farmer View
-  Widget _buildWeatherChip(
-    IconData iconData,
-    Color iconColor,
-    String label,
-    String value,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.leafGreen.withValues(alpha: 0.22)),
-        boxShadow: AppColors.glassShadows,
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(iconData, color: iconColor, size: 15),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 14.5,
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSoilMoistureBar(
-    IconData iconData,
-    String label,
-    int percentage,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(iconData, color: AppColors.leafGreen, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            Text(
-              '$percentage%',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-                color: AppColors.leafGreen,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: (percentage / 100.0).clamp(0.0, 1.0),
-            minHeight: 7,
-            backgroundColor: AppColors.leafGreen.withValues(alpha: 0.15),
-            valueColor: const AlwaysStoppedAnimation<Color>(
-              AppColors.leafGreen,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLoadingState() {
     return Center(
       child: GlassCard(
@@ -2154,22 +1888,412 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
       ),
     );
   }
+}
 
-  String _getItemValue(
-    List<MonitoringItem> items,
-    String name,
-    String fallback,
-  ) {
-    for (final i in items) {
-      if (i.name.contains(name) || name.contains(i.name)) {
-        return i.value.toString();
-      }
+/// Fluid, modern bottom sheet displaying comprehensive analytics for an agricultural condition.
+class _ConditionAnalyticsSheet extends StatelessWidget {
+  final AgriculturalCondition condition;
+  final IconData icon;
+  final Color accentColor;
+
+  const _ConditionAnalyticsSheet({
+    required this.condition,
+    required this.icon,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isUnavail = condition.isUnavailable;
+    final isHigh =
+        condition.severity == 'HIGH' || condition.severity == 'CRITICAL';
+    final isMod = condition.severity == 'MODERATE';
+
+    final Color badgeColor;
+    if (isUnavail) {
+      badgeColor = const Color(0xFF6B7280);
+    } else if (isHigh) {
+      badgeColor = const Color(0xFFEF4444);
+    } else if (isMod) {
+      badgeColor = const Color(0xFFD97706);
+    } else {
+      badgeColor = AppColors.leafGreen;
     }
-    return fallback;
-  }
 
-  double _parseNum(String val) {
-    final d = double.tryParse(val);
-    return d ?? 0.32;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Container(
+      constraints: BoxConstraints(maxHeight: screenHeight * 0.85),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAF8),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            // Top Drag Handle
+            Center(
+              child: Container(
+                width: 42,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Modal Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Icon(icon, color: accentColor, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${condition.title} Analytics',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: badgeColor.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: badgeColor.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Text(
+                                condition.status,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: badgeColor,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Confidence: ${condition.confidence}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.textMuted,
+                      size: 22,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.05),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(color: Colors.black12, height: 1),
+
+            // Scrollable Content
+            Flexible(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Section 1: Farmer Suggestion
+                    Text(
+                      'FARMER ADVISORY',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: accentColor.withValues(alpha: 0.22),
+                        ),
+                        boxShadow: AppColors.glassShadows,
+                      ),
+                      child: Text(
+                        condition.explanation,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                          height: 1.45,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Section 2: Technical Rationale & Methodology
+                    if (condition.technicalSummary.isNotEmpty) ...[
+                      Text(
+                        'SCIENTIFIC METHODOLOGY & RATIONALE',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textSecondary,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.black12),
+                          boxShadow: AppColors.glassShadows,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.science_rounded,
+                              size: 18,
+                              color: AppColors.leafGreen,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                condition.technicalSummary,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+
+                    // Section 3: Supporting Telemetry Values Grid
+                    if (condition.supportingMetrics.isNotEmpty) ...[
+                      Text(
+                        'OBSERVED TELEMETRY & MEASUREMENTS',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textSecondary,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          final cardWidth = (constraints.maxWidth - 10) / 2;
+                          return Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: condition.supportingMetrics.entries.map((
+                              e,
+                            ) {
+                              return Container(
+                                width: cardWidth,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: AppColors.leafGreen.withValues(
+                                      alpha: 0.2,
+                                    ),
+                                  ),
+                                  boxShadow: AppColors.glassShadows,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      e.key,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textMuted,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        e.value,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16.5,
+                                          fontWeight: FontWeight.w900,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+
+                    // Section 4: Data Provenance & Sources
+                    if (condition.sources.isNotEmpty) ...[
+                      Text(
+                        'DATA PROVENANCE & SATELLITE SOURCES',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textSecondary,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.black12),
+                          boxShadow: AppColors.glassShadows,
+                        ),
+                        child: Column(
+                          children: condition.sources.map((src) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.verified_rounded,
+                                    size: 15,
+                                    color: AppColors.leafGreen,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      src,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11.5,
+                                        color: AppColors.textSecondary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Done / Close Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.leafGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          'Done',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

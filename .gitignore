@@ -1,53 +1,106 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# ─────────────────────────────────────────────────────────────────────────────
+# FarmSense / Plant Project .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
 
-# IntelliJ related
+# ─── 1. Flutter / Dart / Pub Build Artifacts ─────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+
+# ─── 2. IDE & Editor Artifacts ───────────────────────────────────────────────
+.idea/
+.vscode/
 *.iml
 *.ipr
 *.iws
-.idea/
+*.sublime-project
+*.sublime-workspace
+.history/
+.atom/
+.buildlog/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Local Environment & Gradle Caches
-android/local.properties
+# ─── 3. Android Platform Artifacts ───────────────────────────────────────────
 .gradle/
 **/android/.gradle/
 **/android/build/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
 android/app/plant_project_android.iml
 android/plant_project_android.iml
+plant_project.iml
+
+# ─── 4. iOS & macOS Platform Artifacts ───────────────────────────────────────
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/macos/Pods/
+**/macos/.symlinks/
+**/macos/Flutter/ephemeral/
+DerivedData/
+*.xcworkspace
+*.xcuserdata
+
+# ─── 5. Windows & Linux Platform Ephemeral Artifacts ─────────────────────────
+**/windows/flutter/ephemeral/
+**/linux/flutter/ephemeral/
+
+# ─── 6. Operating System & Miscellaneous Temporary Files ─────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+*.class
+*.log
+*.swp
+*.tmp
+*.bak
+*.symbols
+app.*.symbols
+app.*.map.json
+migrate_working_dir/
+
+# ─── 7. Python, Backend & Scratch Scripts ────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+backend/
+agricultural_monitoring.py
+mandi.py
+
+# ─── 8. Prompt Notes & Audit Reports (Non-runtime Documentation) ─────────────
+FLUTTER_RAG_PROMPT.txt
+Flutter Optimisation prompt.txt
+POST_OPTIMIZATION_AUDIT_REPORT.txt
+PROJECT_TECHNICAL_AUDIT.txt
+
+# ─── 9. Non-runtime Design References & Mockups ──────────────────────────────
+My data/
+kimo.gif
+
+# ─── 10. Unused Video & Static Image Assets ──────────────────────────────────
+# Keep active runtime assets: assets/images/leaf.png, assets/svg/*
+assets/videos/
+assets/images/kibo.png
+assets/images/kibo_clean.png
+assets/images/kibo_nobg.png
+assets/images/kimo_transparent.gif
+assets/images/megha_ai_mascot.png
