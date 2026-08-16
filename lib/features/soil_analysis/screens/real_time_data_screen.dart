@@ -70,18 +70,22 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   }
 
   void _onGlobalDataChanged() {
+    final activeLoc =
+        AgriculturalMonitoringService.instance.activeLocationNotifier.value;
     final updated =
         AgriculturalMonitoringService.instance.globalDataNotifier.value;
-    if (updated != null && mounted) {
+    if (mounted) {
       setState(() {
-        _data = updated;
-        final rawSections = updated.sections;
-        _sortedSectionKeys = rawSections.keys.toList()
-          ..sort((a, b) {
-            if (a.contains('satellite')) return -1;
-            if (b.contains('satellite')) return 1;
-            return a.compareTo(b);
-          });
+        if (updated != null && (updated.farmId == null || updated.farmId == activeLoc.id)) {
+          _data = updated;
+          final rawSections = updated.sections;
+          _sortedSectionKeys = rawSections.keys.toList()
+            ..sort((a, b) {
+              if (a.contains('satellite')) return -1;
+              if (b.contains('satellite')) return 1;
+              return a.compareTo(b);
+            });
+        }
       });
     }
   }

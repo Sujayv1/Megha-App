@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:plant_project/features/soil_analysis/services/agricultural_monitoring_service.dart';
+import 'package:plant_project/features/soil_analysis/services/sentinel2_observation_service.dart';
+import 'package:plant_project/features/soil_analysis/services/vegetation_index_engine.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -397,6 +399,273 @@ void main() {
         ret3.sections['2_satellite_and_vegetation']!.firstWhere((i) => i.name == IndicatorKeys.ndvi).value,
         equals(0.30),
       );
+    });
+
+    test('K & L. Farm A & B coordinate fidelity - all data uses exact farm coordinates', () async {
+      final farmA = SavedFarmLocation(
+        id: 'farm_plot_alpha',
+        name: 'Alpha Orchard',
+        latitude: 14.4644,
+        longitude: 75.9218,
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final farmB = SavedFarmLocation(
+        id: 'farm_plot_beta',
+        name: 'Beta Vineyard',
+        latitude: 12.9716,
+        longitude: 77.5946,
+        createdAt: DateTime(2026, 1, 1),
+      );
+
+      final dataA = createMockData(
+        farmId: farmA.id,
+        farmName: farmA.name,
+        lat: farmA.latitude,
+        lon: farmA.longitude,
+        ndvi: 0.85,
+        temp: 24.5,
+      );
+      final dataB = createMockData(
+        farmId: farmB.id,
+        farmName: farmB.name,
+        lat: farmB.latitude,
+        lon: farmB.longitude,
+        ndvi: 0.42,
+        temp: 35.0,
+      );
+
+      await service.saveDataForFarm(farmA.id, dataA);
+      await service.saveDataForFarm(farmB.id, dataB);
+
+      final fetchedA = await service.getDataForFarm(farmA.id);
+      expect(fetchedA!.latitude, equals(14.4644));
+      expect(fetchedA.longitude, equals(75.9218));
+
+      final fetchedB = await service.getDataForFarm(farmB.id);
+      expect(fetchedB!.latitude, equals(12.9716));
+      expect(fetchedB.longitude, equals(77.5946));
+    });
+
+    test('M. Switching A -> B -> A restores and retains exact segregated data for each farm', () async {
+      final farmA = SavedFarmLocation(
+        id: 'farm_plot_alpha',
+        name: 'Alpha Orchard',
+        latitude: 14.464,
+        longitude: 75.922,
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final farmB = SavedFarmLocation(
+        id: 'farm_plot_beta',
+        name: 'Beta Vineyard',
+        latitude: 12.971,
+        longitude: 77.594,
+        createdAt: DateTime(2026, 1, 1),
+      );
+
+      final dataA = createMockData(
+        farmId: farmA.id,
+        farmName: farmA.name,
+        lat: farmA.latitude,
+        lon: farmA.longitude,
+        ndvi: 0.88,
+        temp: 22.0,
+      );
+      final dataB = createMockData(
+        farmId: farmB.id,
+        farmName: farmB.name,
+        lat: farmB.latitude,
+        lon: farmB.longitude,
+        ndvi: 0.38,
+        temp: 36.0,
+      );
+
+      await service.saveDataForFarm(farmA.id, dataA);
+      await service.saveDataForFarm(farmB.id, dataB);
+
+      // Select A
+      await service.selectLocation(farmA);
+      expect(service.globalDataNotifier.value!.farmId, equals(farmA.id));
+      expect(
+        service.globalDataNotifier.value!.sections['2_satellite_and_vegetation']!
+            .firstWhere((i) => i.name == IndicatorKeys.ndvi)
+            .value,
+        equals(0.88),
+      );
+
+      // Select B
+      await service.selectLocation(farmB);
+      expect(service.globalDataNotifier.value!.farmId, equals(farmB.id));
+      expect(
+        service.globalDataNotifier.value!.sections['2_satellite_and_vegetation']!
+            .firstWhere((i) => i.name == IndicatorKeys.ndvi)
+            .value,
+        equals(0.38),
+      );
+
+      // Select A again -> restores A's exact data
+      await service.selectLocation(farmA);
+      expect(service.globalDataNotifier.value!.farmId, equals(farmA.id));
+      expect(
+        service.globalDataNotifier.value!.sections['2_satellite_and_vegetation']!
+            .firstWhere((i) => i.name == IndicatorKeys.ndvi)
+            .value,
+        equals(0.88),
+      );
+    });
+
+    test('N. Missing Sentinel-2 data produces DATA UNAVAILABLE and never fabricated values', () async {
+      final unavailObs = Sentinel2Observation.unavailable(
+        date: DateTime.now(),
+        reason: 'Cloud coverage > 35%',
+      );
+
+      final vegMetrics = VegetationIndexEngine.deriveIndices(
+        satelliteObservation: unavailObs,
+        vpd: 1.4,
+      );
+
+      expect(vegMetrics.ndvi, isNull);
+      expect(vegMetrics.evi, isNull);
+      expect(vegMetrics.ndre, isNull);
+      expect(vegMetrics.cropVigorStatus, equals('AWAITING SATELLITE PASS'));
+    });
+
+    test('O. STAC scene discovery without pixel sampling retains asset URLs and null bands', () {
+      final obs = Sentinel2Observation.unavailable(
+        date: DateTime(2026, 7, 14),
+        reason: 'Scene S2B_43PES_20260714_0_L2A discovered. Point sampling pending.',
+        sceneId: 'S2B_43PES_20260714_0_L2A',
+        assetUrls: {
+          'B02_blue': 'https://sentinel-cogs.s3.us-west-2.amazonaws.com/B02.tif',
+          'B04_red': 'https://sentinel-cogs.s3.us-west-2.amazonaws.com/B04.tif',
+          'B08_nir': 'https://sentinel-cogs.s3.us-west-2.amazonaws.com/B08.tif',
+        },
+        cloudPercentage: 28.7,
+      );
+
+      expect(obs.available, isFalse);
+      expect(obs.sceneId, equals('S2B_43PES_20260714_0_L2A'));
+      expect(obs.assetUrls, isNotNull);
+      expect(obs.assetUrls!['B04_red'], contains('B04.tif'));
+      expect(obs.b2, isNull);
+      expect(obs.b4, isNull);
+      expect(obs.b8, isNull);
+    });
+
+    test('P. Indices originate strictly from returned bands with no hardcoded fallback', () {
+      // Farm A: Healthy green canopy
+      final obsA = Sentinel2Observation(
+        available: true,
+        observationDate: '2026-07-14',
+        b2: 0.025,
+        b3: 0.060,
+        b4: 0.035,
+        b5: 0.120,
+        b8: 0.480,
+        b11: 0.140,
+      );
+      final metricsA = VegetationIndexEngine.deriveIndices(satelliteObservation: obsA);
+      expect(metricsA.ndvi, closeTo((0.480 - 0.035) / (0.480 + 0.035), 0.001)); // ~0.864
+
+      // Farm B: Sparse / stressed vegetation
+      final obsB = Sentinel2Observation(
+        available: true,
+        observationDate: '2026-07-14',
+        b2: 0.070,
+        b3: 0.080,
+        b4: 0.150,
+        b5: 0.180,
+        b8: 0.220,
+        b11: 0.260,
+      );
+      final metricsB = VegetationIndexEngine.deriveIndices(satelliteObservation: obsB);
+      expect(metricsB.ndvi, closeTo((0.220 - 0.150) / (0.220 + 0.150), 0.001)); // ~0.189
+
+      // Values must differ dynamically and match exact formulas
+      expect(metricsA.ndvi, isNot(equals(metricsB.ndvi)));
+      expect(metricsA.cropVigorStatus, equals('DENSE CANOPY (Optimal Vigor)'));
+      expect(metricsB.cropVigorStatus, equals('SPARSE / WATER STRESSED'));
+    });
+
+    test('Q. Digital Number (DN) scaling to BOA surface reflectance (0.0001 scale factor)', () {
+      // DN = 1932 -> 0.1932 reflectance
+      const rawDnRed = 1932.0;
+      const rawDnNir = 2252.0;
+
+      final redReflectance = rawDnRed / 10000.0;
+      final nirReflectance = rawDnNir / 10000.0;
+
+      expect(redReflectance, equals(0.1932));
+      expect(nirReflectance, equals(0.2252));
+
+      final ndvi = VegetationIndexEngine.calculateNDVI(redReflectance, nirReflectance);
+      expect(ndvi, isNotNull);
+      expect(ndvi!, closeTo((0.2252 - 0.1932) / (0.2252 + 0.1932), 0.0001));
+    });
+
+    test('R. Multi-Farm sampled spectral segregation - Farm A and B retain distinct sampled bands', () async {
+      const farmIdA = 'farm_davangere';
+      const farmIdB = 'farm_shimoga';
+
+      final snapA = createMockData(
+        farmId: farmIdA,
+        farmName: 'Davangere Field',
+        lat: 14.4644,
+        lon: 75.9218,
+        ndvi: 0.0765,
+        temp: 27.5,
+      );
+      final snapB = createMockData(
+        farmId: farmIdB,
+        farmName: 'Shimoga Forest',
+        lat: 13.9299,
+        lon: 75.5681,
+        ndvi: 0.0893,
+        temp: 24.8,
+      );
+
+      await service.saveDataForFarm(farmIdA, snapA);
+      await service.saveDataForFarm(farmIdB, snapB);
+
+      final recA = await service.getDataForFarm(farmIdA);
+      final recB = await service.getDataForFarm(farmIdB);
+
+      expect(recA!.farmId, equals(farmIdA));
+      expect(recB!.farmId, equals(farmIdB));
+
+      final ndviA = recA.sections['2_satellite_and_vegetation']!
+          .firstWhere((i) => i.name == IndicatorKeys.ndvi)
+          .value;
+      final ndviB = recB.sections['2_satellite_and_vegetation']!
+          .firstWhere((i) => i.name == IndicatorKeys.ndvi)
+          .value;
+
+      expect(ndviA, equals(0.0765));
+      expect(ndviB, equals(0.0893));
+      expect(ndviA, isNot(equals(ndviB)));
+    });
+
+    test('S. Invalid / out-of-bounds pixel returns null without fabricating values', () {
+      final invalidObs = Sentinel2Observation(
+        available: false,
+        reason: 'Pixel outside raster footprint or cloudy pass',
+        observationDate: '2026-07-14',
+        b2: null,
+        b3: null,
+        b4: null,
+        b5: null,
+        b8: null,
+        b11: null,
+      );
+
+      final metrics = VegetationIndexEngine.deriveIndices(satelliteObservation: invalidObs);
+      expect(metrics.ndvi, isNull);
+      expect(metrics.evi, isNull);
+      expect(metrics.ndwi, isNull);
+      expect(metrics.ndre, isNull);
+      expect(metrics.lai, isNull);
+      expect(metrics.fapar, isNull);
+      expect(metrics.cropVigorStatus, equals('AWAITING SATELLITE PASS'));
     });
   });
 }

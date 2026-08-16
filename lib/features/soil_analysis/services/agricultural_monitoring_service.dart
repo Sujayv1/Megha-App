@@ -875,12 +875,16 @@ class AgriculturalMonitoringService {
     } catch (_) {}
 
     if (!forceRefresh) {
-      final cached = await getDataForFarm(location.id);
+      final cached = getMemoryDataForFarm(location.id) ??
+          await getDataForFarm(location.id);
       if (cached != null) {
         globalDataNotifier.value = cached;
         return cached;
       }
     }
+
+    // Clear stale previous farm telemetry so UI doesn't leak old data during fetch
+    globalDataNotifier.value = null;
 
     return fetchMonitoringData(
       lat: location.latitude,
@@ -978,7 +982,11 @@ class AgriculturalMonitoringService {
     Set<String>? requiredKeys,
   }) async {
     final targetFarmId = farmId ?? currentFarmId;
-    final farm = getFarmById(targetFarmId);
+    var farm = getFarmById(targetFarmId);
+    if (farm == null) {
+      await initSavedLocations();
+      farm = getFarmById(targetFarmId);
+    }
     final targetLat = lat ?? farm?.latitude ?? currentLatitude;
     final targetLon = lon ?? farm?.longitude ?? currentLongitude;
     final targetFarmName = farmName ?? farm?.name ?? currentLocationName;
@@ -1409,69 +1417,87 @@ class AgriculturalMonitoringService {
         ),
         MonitoringItem(
           name: IndicatorKeys.b2,
-          value: s2Obs.b2 ?? 0.0310,
+          value: s2Obs.b2,
           unit: 'reflectance',
           source: 'Sentinel-2 BOA Blue Band (490 nm)',
           observationDate: s2Obs.observationDate,
           dataAgeDays: s2Obs.dataAgeDays,
           spatialResolution: '10 m',
           dataType: 'observed',
-          status: 'BOA REFLECTANCE',
+          status: s2Obs.b2 != null ? 'BOA REFLECTANCE' : 'DATA UNAVAILABLE',
+          isUnavailable: s2Obs.b2 == null,
+          unavailableReason:
+              s2Obs.b2 == null ? 'Missing Sentinel-2 B2 observation' : null,
         ),
         MonitoringItem(
           name: IndicatorKeys.b3,
-          value: s2Obs.b3 ?? 0.0520,
+          value: s2Obs.b3,
           unit: 'reflectance',
           source: 'Sentinel-2 BOA Green Band (560 nm)',
           observationDate: s2Obs.observationDate,
           dataAgeDays: s2Obs.dataAgeDays,
           spatialResolution: '10 m',
           dataType: 'observed',
-          status: 'BOA REFLECTANCE',
+          status: s2Obs.b3 != null ? 'BOA REFLECTANCE' : 'DATA UNAVAILABLE',
+          isUnavailable: s2Obs.b3 == null,
+          unavailableReason:
+              s2Obs.b3 == null ? 'Missing Sentinel-2 B3 observation' : null,
         ),
         MonitoringItem(
           name: IndicatorKeys.b4,
-          value: s2Obs.b4 ?? 0.0410,
+          value: s2Obs.b4,
           unit: 'reflectance',
           source: 'Sentinel-2 BOA Red Band (665 nm)',
           observationDate: s2Obs.observationDate,
           dataAgeDays: s2Obs.dataAgeDays,
           spatialResolution: '10 m',
           dataType: 'observed',
-          status: 'BOA REFLECTANCE',
+          status: s2Obs.b4 != null ? 'BOA REFLECTANCE' : 'DATA UNAVAILABLE',
+          isUnavailable: s2Obs.b4 == null,
+          unavailableReason:
+              s2Obs.b4 == null ? 'Missing Sentinel-2 B4 observation' : null,
         ),
         MonitoringItem(
           name: IndicatorKeys.b5,
-          value: s2Obs.b5 ?? 0.1180,
+          value: s2Obs.b5,
           unit: 'reflectance',
           source: 'Sentinel-2 BOA RedEdge-1 Band (705 nm)',
           observationDate: s2Obs.observationDate,
           dataAgeDays: s2Obs.dataAgeDays,
           spatialResolution: '20 m',
           dataType: 'observed',
-          status: 'BOA REFLECTANCE',
+          status: s2Obs.b5 != null ? 'BOA REFLECTANCE' : 'DATA UNAVAILABLE',
+          isUnavailable: s2Obs.b5 == null,
+          unavailableReason:
+              s2Obs.b5 == null ? 'Missing Sentinel-2 B5 observation' : null,
         ),
         MonitoringItem(
           name: IndicatorKeys.b8,
-          value: s2Obs.b8 ?? 0.3420,
+          value: s2Obs.b8,
           unit: 'reflectance',
           source: 'Sentinel-2 BOA NIR Band (842 nm)',
           observationDate: s2Obs.observationDate,
           dataAgeDays: s2Obs.dataAgeDays,
           spatialResolution: '10 m',
           dataType: 'observed',
-          status: 'BOA REFLECTANCE',
+          status: s2Obs.b8 != null ? 'BOA REFLECTANCE' : 'DATA UNAVAILABLE',
+          isUnavailable: s2Obs.b8 == null,
+          unavailableReason:
+              s2Obs.b8 == null ? 'Missing Sentinel-2 B8 observation' : null,
         ),
         MonitoringItem(
           name: IndicatorKeys.b11,
-          value: s2Obs.b11 ?? 0.1450,
+          value: s2Obs.b11,
           unit: 'reflectance',
           source: 'Sentinel-2 BOA SWIR-1 Band (1610 nm)',
           observationDate: s2Obs.observationDate,
           dataAgeDays: s2Obs.dataAgeDays,
           spatialResolution: '20 m',
           dataType: 'observed',
-          status: 'BOA REFLECTANCE',
+          status: s2Obs.b11 != null ? 'BOA REFLECTANCE' : 'DATA UNAVAILABLE',
+          isUnavailable: s2Obs.b11 == null,
+          unavailableReason:
+              s2Obs.b11 == null ? 'Missing Sentinel-2 B11 observation' : null,
         ),
       ],
       '3_soil_and_water': [
