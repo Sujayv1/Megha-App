@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../farm_location/models/farm_location_model.dart';
+import '../../farm_location/widgets/farm_location_picker_modal.dart';
 import '../models/agricultural_condition.dart';
 import '../models/agricultural_interpretation.dart';
 import '../models/crop_growth_stage.dart';
@@ -10,6 +12,7 @@ import '../services/agricultural_interpretation_service.dart';
 import '../services/agricultural_monitoring_service.dart';
 import '../widgets/agricultural_metric_representations.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/farm_location_selector_bar.dart';
 
 class RealTimeDataScreen extends StatefulWidget {
@@ -33,6 +36,7 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   // The section key sort is constant for a given dataset; re-sorting on every
   // build() (triggered by tab switches, scroll, etc.) is redundant work.
   List<String>? _sortedSectionKeys;
+  String? _lastRenderedFarmId;
 
   late AnimationController _refreshRotationController;
 
@@ -43,15 +47,12 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
       vsync: this,
       duration: const Duration(seconds: 1),
     );
-    // Bind reactively to Global Indicator Store & Location Notifier
+    // Bind reactively to Global Indicator Store & Active Location Notifier
     AgriculturalMonitoringService.instance.globalDataNotifier.addListener(
       _onGlobalDataChanged,
     );
-    AgriculturalMonitoringService.instance.globalLocationNotifier.addListener(
-      _onGlobalDataChanged,
-    );
     AgriculturalMonitoringService.instance.activeLocationNotifier.addListener(
-      _onGlobalDataChanged,
+      _onActiveLocationChanged,
     );
     _loadInitialData();
   }
@@ -61,56 +62,138 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     AgriculturalMonitoringService.instance.globalDataNotifier.removeListener(
       _onGlobalDataChanged,
     );
-    AgriculturalMonitoringService.instance.globalLocationNotifier
-        .removeListener(_onGlobalDataChanged);
-    AgriculturalMonitoringService.instance.activeLocationNotifier
-        .removeListener(_onGlobalDataChanged);
+    AgriculturalMonitoringService.instance.activeLocationNotifier.removeListener(
+      _onActiveLocationChanged,
+    );
     _refreshRotationController.dispose();
     super.dispose();
   }
 
   void _onGlobalDataChanged() {
-    final activeLoc =
-        AgriculturalMonitoringService.instance.activeLocationNotifier.value;
-    final updated =
-        AgriculturalMonitoringService.instance.globalDataNotifier.value;
-    if (mounted) {
-      setState(() {
-        if (updated != null && (updated.farmId == null || updated.farmId == activeLoc.id)) {
-          _data = updated;
-          final rawSections = updated.sections;
-          _sortedSectionKeys = rawSections.keys.toList()
-            ..sort((a, b) {
-              if (a.contains('satellite')) return -1;
-              if (b.contains('satellite')) return 1;
-              return a.compareTo(b);
-            });
-        }
-      });
+    if (!mounted) return;
+    final service = AgriculturalMonitoringService.instance;
+    final activeLoc = service.activeLocationNotifier.value;
+    final updated = service.globalDataNotifier.value;
+
+    if (activeLoc == null) {
+      if (_data != null) {
+        setState(() {
+          _data = null;
+          _sortedSectionKeys = null;
+        });
+      }
+      return;
+    }
+
+    // Deduplication Guard 1: Verify data belongs to the currently active farmId
+    if (updated != null && updated.farmId != null && updated.farmId != activeLoc.id) {
+      return; // Ignore stale or background telemetry belonging to another farm
+    }
+
+    // Deduplication Guard 2: Skip setState if data reference is already identical
+    if (identical(_data, updated)) return;
+    if (_data == null && updated == null) return;
+
+    _applyNewData(updated, activeLoc.id);
+  }
+
+  void _onActiveLocationChanged() {
+    if (!mounted) return;
+    final service = AgriculturalMonitoringService.instance;
+    final activeLoc = service.activeLocationNotifier.value;
+
+    if (activeLoc == null) {
+      if (_data != null) {
+        setState(() {
+          _data = null;
+          _sortedSectionKeys = null;
+          _lastRenderedFarmId = null;
+        });
+      }
+      return;
+    }
+
+    // Deduplication Guard 1: Skip if already rendering this farmId
+    if (_lastRenderedFarmId == activeLoc.id && _data != null && _data!.farmId == activeLoc.id) {
+      return;
+    }
+
+    _lastRenderedFarmId = activeLoc.id;
+
+    final currentGlobal = service.globalDataNotifier.value;
+
+    if (currentGlobal != null && (currentGlobal.farmId == null || currentGlobal.farmId == activeLoc.id)) {
+      if (!identical(_data, currentGlobal)) {
+        _applyNewData(currentGlobal, activeLoc.id);
+      }
+    } else {
+      _loadDataForFarm(activeLoc.id);
     }
   }
 
+  Future<void> _loadDataForFarm(String farmId) async {
+    final cached = await AgriculturalMonitoringService.instance.getDataForFarm(farmId);
+    if (mounted && cached != null) {
+      final currentActive = AgriculturalMonitoringService.instance.activeLocationNotifier.value;
+      if (currentActive?.id == farmId) {
+        _applyNewData(cached, farmId);
+      }
+    }
+  }
+
+  void _applyNewData(AgriculturalMonitoringData? newData, String farmId) {
+    _lastRenderedFarmId = farmId;
+    List<String>? sortedKeys;
+    if (newData != null) {
+      final rawSections = newData.sections;
+      sortedKeys = rawSections.keys.toList()
+        ..sort((a, b) {
+          if (a.contains('satellite')) return -1;
+          if (b.contains('satellite')) return 1;
+          return a.compareTo(b);
+        });
+    }
+
+    setState(() {
+      _data = newData;
+      _sortedSectionKeys = sortedKeys;
+    });
+  }
+
   Future<void> _loadInitialData() async {
-    final activeLoc =
-        AgriculturalMonitoringService.instance.activeLocationNotifier.value;
-    final data = await AgriculturalMonitoringService.instance.getDataForFarm(
-      activeLoc.id,
-    );
+    await AgriculturalMonitoringService.instance.initSavedLocations();
+    final service = AgriculturalMonitoringService.instance;
+    final activeLoc = service.activeLocationNotifier.value;
+
+    if (activeLoc == null || service.savedLocationsNotifier.value.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _data = null;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    _lastRenderedFarmId = activeLoc.id;
+    final data = await service.getDataForFarm(activeLoc.id);
     if (mounted && data != null) {
-      setState(() {
-        _data = data;
-        final rawSections = data.sections;
-        _sortedSectionKeys = rawSections.keys.toList()
-          ..sort((a, b) {
-            if (a.contains('satellite')) return -1;
-            if (b.contains('satellite')) return 1;
-            return a.compareTo(b);
-          });
-      });
+      final currentActive = service.activeLocationNotifier.value;
+      if (currentActive != null && (data.farmId == null || data.farmId == currentActive.id)) {
+        _applyNewData(data, currentActive.id);
+      }
     }
   }
 
   Future<void> _refreshData() async {
+    final service = AgriculturalMonitoringService.instance;
+    final activeLoc = service.activeLocationNotifier.value;
+
+    if (activeLoc == null || service.savedLocationsNotifier.value.isEmpty) {
+      _openAddFarmLocationPicker();
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _sortedSectionKeys = null; // Clear memoized sort on refresh
@@ -118,32 +201,19 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     _refreshRotationController.repeat();
 
     try {
-      final activeLoc =
-          AgriculturalMonitoringService.instance.activeLocationNotifier.value;
-
-      final results = await Future.wait([
-        AgriculturalMonitoringService.instance.fetchMonitoringData(
-          lat: activeLoc.latitude,
-          lon: activeLoc.longitude,
-          farmName: activeLoc.name,
-          farmId: activeLoc.id,
-        ),
-        Future.delayed(const Duration(milliseconds: 1500)),
-      ]);
-      final fresh = results[0] as AgriculturalMonitoringData;
+      final fresh =
+          await service.fetchMonitoringData(
+        lat: activeLoc.latitude,
+        lon: activeLoc.longitude,
+        farmName: activeLoc.name,
+        farmId: activeLoc.id,
+      );
 
       if (!mounted) return;
-      setState(() {
-        _data = fresh;
-        // Compute and cache section key sort once — reused across all builds.
-        final rawSections = fresh.sections;
-        _sortedSectionKeys = rawSections.keys.toList()
-          ..sort((a, b) {
-            if (a.contains('satellite')) return -1;
-            if (b.contains('satellite')) return 1;
-            return a.compareTo(b);
-          });
-      });
+      final currentActive = service.activeLocationNotifier.value;
+      if (currentActive != null && (fresh.farmId == null || fresh.farmId == currentActive.id)) {
+        _applyNewData(fresh, currentActive.id);
+      }
 
       final timeStr =
           '${fresh.generatedAt.hour.toString().padLeft(2, '0')}:${fresh.generatedAt.minute.toString().padLeft(2, '0')}:${fresh.generatedAt.second.toString().padLeft(2, '0')}';
@@ -210,6 +280,10 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final service = AgriculturalMonitoringService.instance;
+    final hasNoLocation = !service.hasSavedLocations ||
+        service.savedLocationsNotifier.value.isEmpty ||
+        service.activeLocationNotifier.value == null;
 
     return Scaffold(
       backgroundColor: AppColors.bgTop,
@@ -232,16 +306,18 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
                 _buildAppBar(textTheme),
                 _buildSegmentedTabToggle(),
                 Expanded(
-                  child: _data == null && _isLoading
-                      ? _buildLoadingState()
-                      : _data == null
-                      ? _buildEmptyState()
-                      : AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          child: _selectedTab == 0
-                              ? _buildFarmerView(textTheme)
-                              : _buildTechnicalView(textTheme),
-                        ),
+                  child: hasNoLocation
+                      ? _buildNoLocationSetupView(textTheme)
+                      : (_data == null && _isLoading
+                          ? _buildLoadingState()
+                          : _data == null
+                              ? _buildEmptyState()
+                              : AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 300),
+                                  child: _selectedTab == 0
+                                      ? _buildFarmerView(textTheme)
+                                      : _buildTechnicalView(textTheme),
+                                )),
                 ),
               ],
             ),
@@ -1117,14 +1193,14 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
                   const SizedBox(height: 12),
 
                   // 1-Column Full Width List of Parameter Cards (1 reading per row)
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, idx) {
-                      return _buildParameterCard(items[idx]);
-                    },
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (int i = 0; i < items.length; i++) ...[
+                        _buildParameterCard(items[i]),
+                        if (i < items.length - 1) const SizedBox(height: 12),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -1985,6 +2061,306 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
         textAlign: TextAlign.center,
         style: GoogleFonts.poppins(color: AppColors.textMuted),
       ),
+    );
+  }
+
+  Widget _buildNoLocationSetupView(TextTheme textTheme) {
+    return Center(
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: GlassSurface(
+          borderRadius: 28,
+          opacity: 0.94,
+          blur: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 34),
+          borderColor: AppColors.leafGreen.withValues(alpha: 0.35),
+          borderWidth: 1.2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon Badge with soft green glow
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: AppColors.leafGreen.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.leafGreen.withValues(alpha: 0.35),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.add_location_alt_rounded,
+                  color: AppColors.leafGreen,
+                  size: 36,
+                ),
+              ),
+
+              const SizedBox(height: 22),
+
+              // Title
+              Text(
+                'Save Your Farm Location',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Subtitle
+              Text(
+                'Please set up your farm location to start receiving live Sentinel-2 satellite indices, soil moisture, and precision weather telemetry.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.textMuted,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Action Button: Save Farm Location
+              Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF04B55E),
+                      AppColors.leafGreen,
+                      Color(0xFF028A46),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.leafGreen.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _openAddFarmLocationPicker,
+                    child: Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.add_location_rounded,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Save Farm Location',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAddFarmLocationPicker() async {
+    final service = AgriculturalMonitoringService.instance;
+    const fallbackLat = 12.9716; // Center on India / Bengaluru region
+    const fallbackLon = 77.5946;
+
+    final result = await FarmLocationPickerModal.show(
+      context,
+      currentLoc: const FarmLocationModel(
+        latitude: fallbackLat,
+        longitude: fallbackLon,
+        locationName: '',
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (result != null) {
+      final lat = result['lat'] as double;
+      final lon = result['lon'] as double;
+      final returnedName = result['name'] as String?;
+
+      final finalName = await _showFarmNameInputDialog(
+        initialName: (returnedName != null && returnedName.isNotEmpty)
+            ? returnedName
+            : 'My Farm ${service.savedLocationsNotifier.value.length + 1}',
+        latitude: lat,
+        longitude: lon,
+      );
+
+      if (!mounted) return;
+
+      if (finalName != null && finalName.trim().isNotEmpty) {
+        setState(() => _isLoading = true);
+        await service.saveLocation(
+          name: finalName.trim(),
+          latitude: lat,
+          longitude: lon,
+        );
+
+        if (mounted) {
+          await _refreshData();
+        }
+      }
+    }
+  }
+
+  Future<String?> _showFarmNameInputDialog({
+    required String initialName,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final controller = TextEditingController(text: initialName);
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.leafGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.edit_location_alt_rounded,
+                  color: AppColors.leafGreen,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Name Farm Location',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Coordinates: ${latitude.toStringAsFixed(4)}° N, ${longitude.toStringAsFixed(4)}° E',
+                style: GoogleFonts.poppins(
+                  fontSize: 11.5,
+                  color: AppColors.textMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Farm Location Name',
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    color: AppColors.leafGreen,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  hintText: 'e.g. Home Plot',
+                  hintStyle: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    color: Colors.grey.shade400,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.withValues(alpha: 0.06),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: AppColors.leafGreen),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: AppColors.leafGreen,
+                      width: 1.8,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                Navigator.of(ctx).pop(text.isNotEmpty ? text : initialName);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.leafGreen,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: Text(
+                'Save Location',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

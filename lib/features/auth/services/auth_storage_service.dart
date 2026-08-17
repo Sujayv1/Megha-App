@@ -33,7 +33,7 @@ class UserModel {
       fullName: json['fullName']?.toString() ?? 'Farmer',
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
-      farmLocation: json['farmLocation']?.toString() ?? 'India',
+      farmLocation: json['farmLocation']?.toString() ?? 'Main Farm',
       createdAt:
           DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
     );
@@ -67,70 +67,99 @@ class AuthStorageService {
     }
   }
 
-  /// Performs user authentication (login).
+  /// Performs user authentication (login) against locally registered users.
   Future<UserModel> login({
-    required String identifier, // email or phone
+    required String identifier,
     required String password,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final registeredStr = prefs.getStringList(_keyRegisteredUsers) ?? [];
+    final cleanId = identifier.trim().toLowerCase();
+    final cleanPass = password.trim();
 
     for (final str in registeredStr) {
       try {
         final map = jsonDecode(str) as Map<String, dynamic>;
-        final storedEmail = map['email']?.toString().toLowerCase() ?? '';
-        final storedPhone = map['phone']?.toString().trim() ?? '';
-        final query = identifier.trim().toLowerCase();
+        final storedEmail = (map['email']?.toString() ?? '').trim().toLowerCase();
+        final storedPass = (map['password']?.toString() ?? '').trim();
 
-        if (query == storedEmail || query == storedPhone) {
+        if (storedEmail == cleanId) {
+          if (storedPass.isNotEmpty && storedPass != cleanPass) {
+            throw Exception('Incorrect password. Please try again.');
+          }
           final user = UserModel.fromJson(map);
           await prefs.setBool(_keyIsLoggedIn, true);
           await prefs.setString(_keyCurrentUser, jsonEncode(user.toJson()));
           return user;
         }
-      } catch (_) {}
+      } catch (e) {
+        if (e is Exception && e.toString().contains('Incorrect password')) {
+          rethrow;
+        }
+      }
     }
 
-    // Default mock user if logging in first time
-    final defaultUser = UserModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      fullName: 'Farmer User',
-      email: identifier.contains('@') ? identifier : 'farmer@farmsense.ai',
-      phone: identifier.contains('@') ? '+91 9876543210' : identifier,
-      farmLocation: 'Punjab, India',
-      createdAt: DateTime.now(),
-    );
+    if (registeredStr.isEmpty) {
+      // First-time fallback user if no registered accounts exist yet
+      final defaultUser = UserModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        fullName: 'Farmer User',
+        email: cleanId.contains('@') ? cleanId : 'farmer@farmsense.ai',
+        phone: '+91 9876543210',
+        farmLocation: 'Main Farm',
+        createdAt: DateTime.now(),
+      );
+      await prefs.setBool(_keyIsLoggedIn, true);
+      await prefs.setString(_keyCurrentUser, jsonEncode(defaultUser.toJson()));
+      return defaultUser;
+    }
 
-    await prefs.setBool(_keyIsLoggedIn, true);
-    await prefs.setString(_keyCurrentUser, jsonEncode(defaultUser.toJson()));
-    return defaultUser;
+    throw Exception('No account found for $identifier. Please create an account.');
   }
 
-  /// Registers a new user (signup).
+  /// Registers a new user and persists in app storage.
+  /// Does NOT automatically log in, so user is redirected to LoginScreen.
   Future<UserModel> signup({
     required String fullName,
     required String email,
-    required String phone,
-    required String farmLocation,
     required String password,
+    String phone = '',
+    String farmLocation = 'Main Farm',
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanPass = password.trim();
+
+    final registeredStr = prefs.getStringList(_keyRegisteredUsers) ?? [];
+
+    // Check if account already exists
+    for (final str in registeredStr) {
+      try {
+        final map = jsonDecode(str) as Map<String, dynamic>;
+        if ((map['email']?.toString() ?? '').trim().toLowerCase() == cleanEmail) {
+          throw Exception('An account with $email already exists. Please sign in.');
+        }
+      } catch (e) {
+        if (e is Exception && e.toString().contains('already exists')) {
+          rethrow;
+        }
+      }
+    }
 
     final newUser = UserModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      fullName: fullName,
-      email: email,
-      phone: phone,
-      farmLocation: farmLocation,
+      fullName: fullName.trim(),
+      email: cleanEmail,
+      phone: phone.trim(),
+      farmLocation: farmLocation.trim(),
       createdAt: DateTime.now(),
     );
 
-    final registeredStr = prefs.getStringList(_keyRegisteredUsers) ?? [];
-    registeredStr.add(jsonEncode(newUser.toJson()));
-    await prefs.setStringList(_keyRegisteredUsers, registeredStr);
+    final userMap = newUser.toJson();
+    userMap['password'] = cleanPass;
 
-    await prefs.setBool(_keyIsLoggedIn, true);
-    await prefs.setString(_keyCurrentUser, jsonEncode(newUser.toJson()));
+    registeredStr.add(jsonEncode(userMap));
+    await prefs.setStringList(_keyRegisteredUsers, registeredStr);
 
     return newUser;
   }

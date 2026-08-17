@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -424,47 +425,26 @@ class AgriculturalMonitoringService {
   static const String _savedLocationsKey = 'farmsense_saved_farm_locations_v1';
   static const String _activeLocationIdKey = 'farmsense_active_farm_location_id_v1';
   static const String _userLocationKey = 'farmsense_global_user_location';
+  static const String _legacyMigrationCompletedKey = 'farmsense_legacy_storage_migrated_v1';
 
   /// Central Reactive Notifier holding all saved farms
   final ValueNotifier<List<SavedFarmLocation>> savedLocationsNotifier =
-      ValueNotifier<List<SavedFarmLocation>>([
-    SavedFarmLocation(
-      id: 'default_farm_plot_01',
-      name: AppConstants.defaultLocationName,
-      latitude: AppConstants.defaultLatitude,
-      longitude: AppConstants.defaultLongitude,
-      createdAt: DateTime(2026, 1, 1),
-    ),
-  ]);
+      ValueNotifier<List<SavedFarmLocation>>([]);
 
   /// Central Reactive Notifier holding the active selected farm
-  final ValueNotifier<SavedFarmLocation> activeLocationNotifier =
-      ValueNotifier<SavedFarmLocation>(
-    SavedFarmLocation(
-      id: 'default_farm_plot_01',
-      name: AppConstants.defaultLocationName,
-      latitude: AppConstants.defaultLatitude,
-      longitude: AppConstants.defaultLongitude,
-      createdAt: DateTime(2026, 1, 1),
-    ),
-  );
+  final ValueNotifier<SavedFarmLocation?> activeLocationNotifier =
+      ValueNotifier<SavedFarmLocation?>(null);
 
   /// Central Reactive Notifier holding the global user location (legacy compatibility).
-  final ValueNotifier<UserLocationModel> userLocationNotifier =
-      ValueNotifier<UserLocationModel>(
-    const UserLocationModel(
-      latitude: AppConstants.defaultLatitude,
-      longitude: AppConstants.defaultLongitude,
-      locationName: AppConstants.defaultLocationName,
-    ),
-  );
+  final ValueNotifier<UserLocationModel?> userLocationNotifier =
+      ValueNotifier<UserLocationModel?>(null);
 
   /// Central Reactive Notifier for Real-time Monitoring Data of active farm.
   final ValueNotifier<AgriculturalMonitoringData?> globalDataNotifier =
       ValueNotifier<AgriculturalMonitoringData?>(null);
 
   /// Backward-compatible alias for location notifier
-  ValueNotifier<UserLocationModel> get globalLocationNotifier => userLocationNotifier;
+  ValueNotifier<UserLocationModel?> get globalLocationNotifier => userLocationNotifier;
 
   final http.Client _client = http.Client();
   static const Duration _inMemoryTtl = Duration(minutes: 15);
@@ -474,46 +454,59 @@ class AgriculturalMonitoringService {
   final Map<String, ({AgriculturalMonitoringData data, DateTime time})>
       _farmCurrentMemoryCache = {};
   final Map<String, List<AgriculturalMonitoringData>> _farmHistoryMemoryCache = {};
+  final Map<String, Future<AgriculturalMonitoringData>> _inFlightFetches = {};
 
-  String get currentFarmId => activeLocationNotifier.value.id;
-  String get currentLocationName => activeLocationNotifier.value.name;
-  double get currentLatitude => activeLocationNotifier.value.latitude;
-  double get currentLongitude => activeLocationNotifier.value.longitude;
+  Future<void>? _initSavedLocationsFuture;
+
+  bool get hasSavedLocations =>
+      savedLocationsNotifier.value.isNotEmpty && activeLocationNotifier.value != null;
+
+  String? get currentFarmId => activeLocationNotifier.value?.id;
+  String get currentLocationName => activeLocationNotifier.value?.name ?? 'My Farm';
+  double get currentLatitude => activeLocationNotifier.value?.latitude ?? AppConstants.defaultLatitude;
+  double get currentLongitude => activeLocationNotifier.value?.longitude ?? AppConstants.defaultLongitude;
   List<SavedFarmLocation> get allFarms =>
       List.unmodifiable(savedLocationsNotifier.value);
 
   String _getFarmStorageKey(String farmId) => '$_farmStoragePrefix$farmId';
 
   /// Initializes saved farms and active location from persistent storage,
-  /// executing clean migration of legacy un-scoped cache keys into farmId partitions.
-  Future<void> initSavedLocations() async {
+  /// executing clean one-time migration of legacy un-scoped cache keys into farmId partitions.
+  Future<void> initSavedLocations() {
+    if (_initSavedLocationsFuture != null) {
+      return _initSavedLocationsFuture!;
+    }
+
+    final future = _doInitSavedLocations();
+    _initSavedLocationsFuture = future;
+
+    return future.whenComplete(() {
+      _initSavedLocationsFuture = null;
+    });
+  }
+
+  Future<void> _doInitSavedLocations() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonListStr = prefs.getString(_savedLocationsKey);
       List<SavedFarmLocation> loadedList = [];
 
-      if (jsonListStr != null) {
-        final decoded = jsonDecode(jsonListStr) as List;
-        loadedList = decoded
-            .map((item) => SavedFarmLocation.fromJson(item as Map<String, dynamic>))
-            .toList();
+      if (jsonListStr != null && jsonListStr.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(jsonListStr) as List;
+          loadedList = decoded
+              .map((item) => SavedFarmLocation.fromJson(item as Map<String, dynamic>))
+              .toList();
+        } catch (_) {}
       }
 
       if (loadedList.isEmpty) {
-        // Create initial default farm
-        loadedList = [
-          SavedFarmLocation(
-            id: 'default_farm_plot_01',
-            name: AppConstants.defaultLocationName,
-            latitude: AppConstants.defaultLatitude,
-            longitude: AppConstants.defaultLongitude,
-            createdAt: DateTime.now(),
-          ),
-        ];
-        await prefs.setString(
-          _savedLocationsKey,
-          jsonEncode(loadedList.map((e) => e.toJson()).toList()),
-        );
+        // No farms saved yet - DO NOT inject default coordinates or mock farms!
+        savedLocationsNotifier.value = [];
+        activeLocationNotifier.value = null;
+        userLocationNotifier.value = null;
+        globalDataNotifier.value = null;
+        return;
       }
 
       savedLocationsNotifier.value = loadedList;
@@ -522,22 +515,41 @@ class AgriculturalMonitoringService {
       SavedFarmLocation active = loadedList.first;
       if (activeId != null) {
         final found = loadedList.where((loc) => loc.id == activeId);
-        if (found.isNotEmpty) active = found.first;
+        if (found.isNotEmpty) {
+          active = found.first;
+        } else {
+          await prefs.setString(_activeLocationIdKey, active.id);
+          await prefs.setString(
+            _userLocationKey,
+            jsonEncode(active.toUserLocationModel().toJson()),
+          );
+        }
+      } else {
+        await prefs.setString(_activeLocationIdKey, active.id);
+        await prefs.setString(
+          _userLocationKey,
+          jsonEncode(active.toUserLocationModel().toJson()),
+        );
       }
 
       activeLocationNotifier.value = active;
       userLocationNotifier.value = active.toUserLocationModel();
 
-      // Clean migration of legacy keys into farmId partition
+      // Clean one-time migration of legacy keys into farmId partition if any
       await _migrateLegacyStorage(prefs, loadedList);
     } catch (_) {}
   }
 
-  /// Migrates legacy identity/coordinate caches to dedicated farmId records.
+  /// Migrates legacy identity/coordinate caches to dedicated farmId records (runs once).
   Future<void> _migrateLegacyStorage(
     SharedPreferences prefs,
     List<SavedFarmLocation> farms,
   ) async {
+    // Check if migration has already been completed
+    if (prefs.getBool(_legacyMigrationCompletedKey) == true) {
+      return;
+    }
+
     final allKeys = prefs.getKeys().toList();
 
     for (final farm in farms) {
@@ -574,13 +586,17 @@ class AgriculturalMonitoringService {
         await prefs.remove(k);
       }
     }
+
+    // Mark migration as successfully completed
+    await prefs.setBool(_legacyMigrationCompletedKey, true);
   }
 
   /// Initializes the user location from persistent storage (backward-compatible).
   Future<void> initUserLocation() async => initSavedLocations();
 
   /// Resolves a saved farm location by its unique farmId.
-  SavedFarmLocation? getFarmById(String farmId) {
+  SavedFarmLocation? getFarmById(String? farmId) {
+    if (farmId == null) return null;
     for (final loc in savedLocationsNotifier.value) {
       if (loc.id == farmId) return loc;
     }
@@ -588,7 +604,8 @@ class AgriculturalMonitoringService {
   }
 
   /// Resolves a saved farm location by name (metadata lookup).
-  SavedFarmLocation? getFarmByName(String name) {
+  SavedFarmLocation? getFarmByName(String? name) {
+    if (name == null) return null;
     final clean = name.trim().toLowerCase();
     for (final loc in savedLocationsNotifier.value) {
       if (loc.name.trim().toLowerCase() == clean) return loc;
@@ -737,6 +754,7 @@ class AgriculturalMonitoringService {
     return const [];
   }
 
+
   /// Clears cache and historical partition for ONLY the specified farmId.
   Future<void> clearFarmCache(String farmId) async {
     _farmCurrentMemoryCache.remove(farmId);
@@ -759,7 +777,10 @@ class AgriculturalMonitoringService {
 
   /// Clears active farm cache.
   Future<void> clearCache() async {
-    await clearFarmCache(currentFarmId);
+    final farmId = currentFarmId;
+    if (farmId != null) {
+      await clearFarmCache(farmId);
+    }
   }
 
   /// Clears all caches and historical snapshots across all farms.
@@ -783,6 +804,7 @@ class AgriculturalMonitoringService {
     String? crop,
     DateTime? cultivationStartDate,
   }) async {
+    await initSavedLocations();
     final prefs = await SharedPreferences.getInstance();
     final currentList = List<SavedFarmLocation>.from(savedLocationsNotifier.value);
     final targetId = id ?? 'farm_plot_${DateTime.now().millisecondsSinceEpoch}';
@@ -858,10 +880,13 @@ class AgriculturalMonitoringService {
   }
 
   /// Switches active farm and loads/fetches data specifically for that farmId.
+  /// Implements Stale-While-Revalidate: displays cached data immediately (0ms),
+  /// and if stale (>15 min), performs background refresh without blanking UI.
   Future<AgriculturalMonitoringData?> selectLocation(
     SavedFarmLocation location, {
     bool forceRefresh = false,
   }) async {
+    await initSavedLocations();
     activeLocationNotifier.value = location;
     userLocationNotifier.value = location.toUserLocationModel();
 
@@ -875,29 +900,80 @@ class AgriculturalMonitoringService {
     } catch (_) {}
 
     if (!forceRefresh) {
-      final cached = getMemoryDataForFarm(location.id) ??
-          await getDataForFarm(location.id);
+      // 1. Check in-memory cache first
+      final memEntry = _farmCurrentMemoryCache[location.id];
+      AgriculturalMonitoringData? cached = memEntry?.data;
+      bool isStale = memEntry == null || DateTime.now().difference(memEntry.time) >= _inMemoryTtl;
+
+      // 2. If not in memory, check persisted disk partition
+      if (cached == null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final jsonStr = prefs.getString(_getFarmStorageKey(location.id));
+          if (jsonStr != null) {
+            final record = FarmRecord.fromJson(jsonDecode(jsonStr));
+            if (record.currentData != null) {
+              cached = record.currentData;
+              _farmCurrentMemoryCache[location.id] = (
+                data: record.currentData!,
+                time: record.currentData!.generatedAt,
+              );
+              if (record.history.isNotEmpty) {
+                _farmHistoryMemoryCache[location.id] = record.history;
+              }
+              isStale = DateTime.now().difference(record.currentData!.generatedAt) >= _inMemoryTtl;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. If valid cached data found: DISPLAY IMMEDIATELY (0ms, zero blank screen)
       if (cached != null) {
         globalDataNotifier.value = cached;
+
+        // 4. Stale-While-Revalidate: If stale (>15 min), refresh non-blockingly in background
+        if (isStale) {
+          unawaited(
+            fetchMonitoringData(
+              lat: location.latitude,
+              lon: location.longitude,
+              farmId: location.id,
+              farmName: location.name,
+            ).then((fresh) {
+              // Strict race-condition protection: only update if still on this farm
+              if (currentFarmId == location.id) {
+                globalDataNotifier.value = fresh;
+              }
+            }).catchError((_) {}),
+          );
+        }
+
         return cached;
       }
     }
 
-    // Clear stale previous farm telemetry so UI doesn't leak old data during fetch
+    // 5. If no cached data exists or forceRefresh requested:
+    // Clear globalDataNotifier to show normal loading state and fetch live
     globalDataNotifier.value = null;
 
-    return fetchMonitoringData(
+    final fresh = await fetchMonitoringData(
       lat: location.latitude,
       lon: location.longitude,
       farmId: location.id,
       farmName: location.name,
     );
+
+    if (currentFarmId == location.id) {
+      globalDataNotifier.value = fresh;
+    }
+
+    return fresh;
   }
 
   /// Deletes a saved farm location and its isolated storage partition.
   Future<void> deleteLocation(String id) async {
+    await initSavedLocations();
     final currentList = List<SavedFarmLocation>.from(savedLocationsNotifier.value);
-    if (currentList.length <= 1) return; // Keep at least one farm
 
     currentList.removeWhere((loc) => loc.id == id);
     savedLocationsNotifier.value = currentList;
@@ -911,13 +987,19 @@ class AgriculturalMonitoringService {
       jsonEncode(currentList.map((e) => e.toJson()).toList()),
     );
 
-    if (activeLocationNotifier.value.id == id) {
+    if (currentList.isEmpty) {
+      activeLocationNotifier.value = null;
+      userLocationNotifier.value = null;
+      globalDataNotifier.value = null;
+      await prefs.remove(_activeLocationIdKey);
+      await prefs.remove(_userLocationKey);
+    } else if (activeLocationNotifier.value?.id == id) {
       await selectLocation(currentList.first);
     }
   }
 
   /// Initializes global store and fetches initial data for active farmId.
-  Future<AgriculturalMonitoringData> initializeGlobalStore({
+  Future<AgriculturalMonitoringData?> initializeGlobalStore({
     double? targetLat,
     double? targetLon,
     double? lat,
@@ -925,6 +1007,8 @@ class AgriculturalMonitoringService {
   }) async {
     await initSavedLocations();
     final activeLoc = activeLocationNotifier.value;
+    if (activeLoc == null) return null;
+
     final effectiveLat = targetLat ?? lat ?? activeLoc.latitude;
     final effectiveLon = targetLon ?? lon ?? activeLoc.longitude;
 
@@ -959,18 +1043,36 @@ class AgriculturalMonitoringService {
     );
   }
 
+  /// Refreshes global store data for active farm.
+  Future<AgriculturalMonitoringData> refreshGlobalStore({
+    double? latitude,
+    double? longitude,
+    double? lat,
+    double? lon,
+  }) async {
+    final effectiveLat = latitude ?? lat ?? currentLatitude;
+    final effectiveLon = longitude ?? lon ?? currentLongitude;
+
+    return fetchMonitoringData(
+      lat: effectiveLat,
+      lon: effectiveLon,
+      farmId: currentFarmId,
+      farmName: currentLocationName,
+    );
+  }
+
   /// Retrieves cached monitoring data for matching farmId or active farm.
   Future<AgriculturalMonitoringData?> getCachedData({
     double? targetLat,
     double? targetLon,
   }) async {
     final activeLoc = activeLocationNotifier.value;
+    if (activeLoc == null) return null;
     return getDataForFarm(activeLoc.id);
   }
 
-  /// Fetches real-time agricultural monitoring data.
-  /// Executes the autonomous on-device scientific interpretation pipeline:
-  /// 1. Sentinel-2 Level-2A BOA satellite observation acquisition (INPUTS).
+  /// Real-time Agricultural Monitoring Pipeline Execution:
+  /// 1. Sentinel-2 Level-2A BOA surface reflectance point sampling (INPUTS).
   /// 2. Open-Meteo & ECMWF IFS meteorological and soil hydrology observation (INPUTS).
   /// 3. Scientific derivation of vegetation indices (NDVI, EVI, NDWI, NDRE, LAI, FAPAR) from observed bands (DERIVED).
   /// 4. Multi-hazard agricultural risk modeling and water management recommendation (MODELS).
@@ -981,9 +1083,15 @@ class AgriculturalMonitoringService {
     String? farmName,
     Set<String>? requiredKeys,
   }) async {
-    final targetFarmId = farmId ?? currentFarmId;
+    final targetFarmId = farmId ?? currentFarmId ?? 'farm_default_ad_hoc';
+
+    // Deduplicate in-flight fetches for the same farmId
+    if (_inFlightFetches.containsKey(targetFarmId)) {
+      return _inFlightFetches[targetFarmId]!;
+    }
+
     var farm = getFarmById(targetFarmId);
-    if (farm == null) {
+    if (farm == null && targetFarmId != 'farm_default_ad_hoc') {
       await initSavedLocations();
       farm = getFarmById(targetFarmId);
     }
@@ -991,14 +1099,22 @@ class AgriculturalMonitoringService {
     final targetLon = lon ?? farm?.longitude ?? currentLongitude;
     final targetFarmName = farmName ?? farm?.name ?? currentLocationName;
     final now = DateTime.now();
-
-    return _fetchAutonomousAgriculturalData(
+    final fetchFuture = _fetchAutonomousAgriculturalData(
       targetLat,
       targetLon,
       now,
       farmId: targetFarmId,
       farmName: targetFarmName,
     );
+
+    _inFlightFetches[targetFarmId] = fetchFuture;
+
+    try {
+      final result = await fetchFuture;
+      return result;
+    } finally {
+      _inFlightFetches.remove(targetFarmId);
+    }
   }
 
   Future<AgriculturalMonitoringData> _fetchAutonomousAgriculturalData(
@@ -1009,132 +1125,53 @@ class AgriculturalMonitoringService {
     String? farmName,
   }) async {
     final todayStr = now.toIso8601String().substring(0, 10);
-    Map<String, dynamic> weatherData = {};
-    List<ForecastDayItem> forecastList = [];
+    final stopwatch = Stopwatch()..start();
 
-    double smSurface = 0.26;
-    double smRoot = 0.28;
-    double? soilTemp = 28.0;
-
-    // ── STEP 1: SATELLITE OBSERVATION ACQUISITION (OBSERVED INPUTS) ──────────
-    final s2Obs = await Sentinel2ObservationService.instance.fetchSentinel2Observation(
+    // ── CONCURRENT SATELLITE & WEATHER EXECUTION ─────────────────────────────
+    // 1. Start Sentinel-2 STAC / COG pixel sampling future immediately
+    final s2Future = Sentinel2ObservationService.instance.fetchSentinel2Observation(
       latitude: targetLat,
       longitude: targetLon,
       client: _client,
+    ).catchError((e) {
+      // Isolate Sentinel-2 errors so weather fetching is not impacted
+      return Sentinel2Observation(
+        available: false,
+        reason: 'Sentinel-2 acquisition failed: $e',
+        observationDate: now.toIso8601String().substring(0, 10),
+      );
+    });
+
+    // 2. Start Open-Meteo & ECMWF IFS meteorological request future immediately
+    final weatherFuture = _fetchWeatherData(
+      targetLat: targetLat,
+      targetLon: targetLon,
+      now: now,
     );
 
-    // ── STEP 2: METEOROLOGICAL & SOIL HYDROLOGY ACQUISITION (OBSERVED INPUTS)
-    try {
-      final url = Uri.parse(
-        'https://api.open-meteo.com/v1/forecast?latitude=$targetLat&longitude=$targetLon'
-        '&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,surface_pressure,vapour_pressure_deficit'
-        '&hourly=soil_moisture_0_to_1cm,soil_moisture_9_to_27cm,soil_temperature_0cm'
-        '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,shortwave_radiation_sum,et0_fao_evapotranspiration'
-        '&timezone=auto&past_days=7&forecast_days=7',
-      );
+    // 3. Concurrently await both independent requests: Latency = max(T_s2, T_weather)
+    final results = await Future.wait([
+      s2Future,
+      weatherFuture,
+    ]);
 
-      final resp = await _client.get(url).timeout(const Duration(seconds: 10));
+    final s2Obs = results[0] as Sentinel2Observation;
+    final weatherResult = results[1] as ({
+      Map<String, dynamic> weatherData,
+      List<ForecastDayItem> forecastList,
+      double smSurface,
+      double smRoot,
+      double? soilTemp,
+    });
 
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        final current = data['current'] as Map<String, dynamic>? ?? {};
-        final daily = data['daily'] as Map<String, dynamic>? ?? {};
-        final hourly = data['hourly'] as Map<String, dynamic>? ?? {};
+    final weatherData = weatherResult.weatherData;
+    final forecastList = weatherResult.forecastList;
+    final smSurface = weatherResult.smSurface;
+    final smRoot = weatherResult.smRoot;
+    final soilTemp = weatherResult.soilTemp;
 
-        final temp = (current['temperature_2m'] as num?)?.toDouble() ?? 27.5;
-        final humidity = (current['relative_humidity_2m'] as num?)?.toDouble() ?? 68.0;
-        final wind = (current['wind_speed_10m'] as num?)?.toDouble() ?? 12.4;
-        final vpd = (current['vapour_pressure_deficit'] as num?)?.toDouble() ?? 1.42;
-
-        final sm0List = (hourly['soil_moisture_0_to_1cm'] as List?) ?? [];
-        final smRootList = (hourly['soil_moisture_9_to_27cm'] as List?) ?? [];
-        final soilTempList = (hourly['soil_temperature_0cm'] as List?) ?? [];
-
-        if (sm0List.isNotEmpty) {
-          smSurface = double.parse(((sm0List.last as num).toDouble()).toStringAsFixed(3));
-        }
-        if (smRootList.isNotEmpty) {
-          smRoot = double.parse(((smRootList.last as num).toDouble()).toStringAsFixed(3));
-        }
-        if (soilTempList.isNotEmpty) {
-          soilTemp = double.parse(((soilTempList.last as num).toDouble()).toStringAsFixed(1));
-        } else {
-          soilTemp = null; // Do NOT fabricate LST from air temperature
-        }
-
-        final tMaxs = (daily['temperature_2m_max'] as List?) ?? [];
-        final tMins = (daily['temperature_2m_min'] as List?) ?? [];
-        final pSums = (daily['precipitation_sum'] as List?) ?? [];
-        final pProbs = (daily['precipitation_probability_max'] as List?) ?? [];
-        final solarSums = (daily['shortwave_radiation_sum'] as List?) ?? [];
-        final et0List = (daily['et0_fao_evapotranspiration'] as List?) ?? [];
-        final times = (daily['time'] as List?) ?? [];
-
-        final tempMax = tMaxs.isNotEmpty ? (tMaxs.last as num).toDouble() : temp + 2.5;
-        final tempMin = tMins.isNotEmpty ? (tMins.last as num).toDouble() : temp - 6.5;
-        final rain24h = pSums.isNotEmpty ? (pSums.last as num).toDouble() : 0.0;
-        final rainProbMax = pProbs.isNotEmpty ? (pProbs.last as num).toInt() : 30;
-        final solar = solarSums.isNotEmpty ? (solarSums.last as num).toDouble() : 20.0;
-        final et0 = et0List.isNotEmpty ? (et0List.last as num).toDouble() : 4.2;
-
-        double rain7d = 0.0;
-        for (int i = 0; i < pSums.length && i < 7; i++) {
-          rain7d += (pSums[i] as num).toDouble();
-        }
-
-        weatherData = {
-          'temp': temp,
-          'temp_max': tempMax,
-          'temp_min': tempMin,
-          'humidity': humidity,
-          'rain_24h': rain24h,
-          'rain_7d': double.parse(rain7d.toStringAsFixed(1)),
-          'rain_prob_max': rainProbMax,
-          'wind': wind,
-          'solar': solar,
-          'et0': et0,
-          'vpd': vpd,
-          'date_str': todayStr,
-        };
-
-        for (int i = 0; i < times.length && i < 7; i++) {
-          forecastList.add(ForecastDayItem(
-            date: times[i].toString(),
-            tempMin: i < tMins.length ? (tMins[i] as num).toDouble() : 20.0,
-            tempMax: i < tMaxs.length ? (tMaxs[i] as num).toDouble() : 29.5,
-            rainProbability: i < pProbs.length ? (pProbs[i] as num).toInt() : 30,
-            rainfall: i < pSums.length ? (pSums[i] as num).toDouble() : 0.0,
-          ));
-        }
-      }
-    } catch (_) {
-      weatherData = {
-        'temp': 27.5,
-        'temp_max': 29.8,
-        'temp_min': 20.2,
-        'humidity': 68.0,
-        'rain_24h': 0.0,
-        'rain_7d': 5.0,
-        'rain_prob_max': 20,
-        'wind': 10.0,
-        'solar': 20.0,
-        'et0': 4.2,
-        'vpd': 1.42,
-        'date_str': todayStr,
-      };
-    }
-
-    if (forecastList.isEmpty) {
-      for (int i = 0; i < 7; i++) {
-        final fcDate = now.add(Duration(days: i)).toIso8601String().substring(0, 10);
-        forecastList.add(ForecastDayItem(
-          date: fcDate,
-          tempMin: 20.0,
-          tempMax: 29.0,
-          rainProbability: 25,
-          rainfall: 0.0,
-        ));
-      }
+    if (kDebugMode) {
+      debugPrint('[AgriculturalMonitoringService] Concurrently fetched S2 + Weather in ${stopwatch.elapsedMilliseconds}ms for ($targetLat, $targetLon)');
     }
 
     final vpdVal = (weatherData['vpd'] as double? ?? 1.42);
@@ -1752,8 +1789,154 @@ class AgriculturalMonitoringService {
     );
 
     final effectiveFarmId = farmId ?? currentFarmId;
-    await saveFarmSnapshot(effectiveFarmId, finalResult);
+    if (effectiveFarmId != null) {
+      await saveFarmSnapshot(effectiveFarmId, finalResult);
+    }
 
     return finalResult;
+  }
+
+  /// Concurrently queries Open-Meteo & ECMWF IFS meteorological and hydrology endpoints.
+  Future<({
+    Map<String, dynamic> weatherData,
+    List<ForecastDayItem> forecastList,
+    double smSurface,
+    double smRoot,
+    double? soilTemp,
+  })> _fetchWeatherData({
+    required double targetLat,
+    required double targetLon,
+    required DateTime now,
+  }) async {
+    final todayStr = now.toIso8601String().substring(0, 10);
+    Map<String, dynamic> weatherData = {};
+    List<ForecastDayItem> forecastList = [];
+
+    double smSurface = 0.26;
+    double smRoot = 0.28;
+    double? soilTemp = 28.0;
+
+    try {
+      final url = Uri.parse(
+        'https://api.open-meteo.com/v1/forecast?latitude=$targetLat&longitude=$targetLon'
+        '&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,surface_pressure,vapour_pressure_deficit'
+        '&hourly=soil_moisture_0_to_1cm,soil_moisture_9_to_27cm,soil_temperature_0cm'
+        '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,shortwave_radiation_sum,et0_fao_evapotranspiration'
+        '&timezone=auto&past_days=7&forecast_days=7',
+      );
+
+      final resp = await _client.get(url).timeout(const Duration(seconds: 10));
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final current = data['current'] as Map<String, dynamic>? ?? {};
+        final daily = data['daily'] as Map<String, dynamic>? ?? {};
+        final hourly = data['hourly'] as Map<String, dynamic>? ?? {};
+
+        final temp = (current['temperature_2m'] as num?)?.toDouble() ?? 27.5;
+        final humidity = (current['relative_humidity_2m'] as num?)?.toDouble() ?? 68.0;
+        final wind = (current['wind_speed_10m'] as num?)?.toDouble() ?? 12.4;
+        final vpd = (current['vapour_pressure_deficit'] as num?)?.toDouble() ?? 1.42;
+
+        final sm0List = (hourly['soil_moisture_0_to_1cm'] as List?) ?? [];
+        final smRootList = (hourly['soil_moisture_9_to_27cm'] as List?) ?? [];
+        final soilTempList = (hourly['soil_temperature_0cm'] as List?) ?? [];
+
+        if (sm0List.isNotEmpty) {
+          smSurface = double.parse(((sm0List.last as num).toDouble()).toStringAsFixed(3));
+        }
+        if (smRootList.isNotEmpty) {
+          smRoot = double.parse(((smRootList.last as num).toDouble()).toStringAsFixed(3));
+        }
+        if (soilTempList.isNotEmpty) {
+          soilTemp = double.parse(((soilTempList.last as num).toDouble()).toStringAsFixed(1));
+        } else {
+          soilTemp = null; // Do NOT fabricate LST from air temperature
+        }
+
+        final tMaxs = (daily['temperature_2m_max'] as List?) ?? [];
+        final tMins = (daily['temperature_2m_min'] as List?) ?? [];
+        final pSums = (daily['precipitation_sum'] as List?) ?? [];
+        final pProbs = (daily['precipitation_probability_max'] as List?) ?? [];
+        final solarSums = (daily['shortwave_radiation_sum'] as List?) ?? [];
+        final et0List = (daily['et0_fao_evapotranspiration'] as List?) ?? [];
+        final times = (daily['time'] as List?) ?? [];
+
+        final tempMax = tMaxs.isNotEmpty ? (tMaxs.last as num).toDouble() : temp + 2.5;
+        final tempMin = tMins.isNotEmpty ? (tMins.last as num).toDouble() : temp - 6.5;
+        final rain24h = pSums.isNotEmpty ? (pSums.last as num).toDouble() : 0.0;
+        final rainProbMax = pProbs.isNotEmpty ? (pProbs.last as num).toInt() : 30;
+        final solar = solarSums.isNotEmpty ? (solarSums.last as num).toDouble() : 20.0;
+        final et0 = et0List.isNotEmpty ? (et0List.last as num).toDouble() : 4.2;
+
+        double rain7d = 0.0;
+        for (int i = 0; i < pSums.length && i < 7; i++) {
+          rain7d += (pSums[i] as num).toDouble();
+        }
+
+        weatherData = {
+          'temp': temp,
+          'temp_max': tempMax,
+          'temp_min': tempMin,
+          'humidity': humidity,
+          'rain_24h': rain24h,
+          'rain_7d': double.parse(rain7d.toStringAsFixed(1)),
+          'rain_prob_max': rainProbMax,
+          'wind': wind,
+          'solar': solar,
+          'et0': et0,
+          'vpd': vpd,
+          'date_str': todayStr,
+        };
+
+        for (int i = 0; i < times.length && i < 7; i++) {
+          forecastList.add(ForecastDayItem(
+            date: times[i].toString(),
+            tempMin: i < tMins.length ? (tMins[i] as num).toDouble() : 20.0,
+            tempMax: i < tMaxs.length ? (tMaxs[i] as num).toDouble() : 29.5,
+            rainProbability: i < pProbs.length ? (pProbs[i] as num).toInt() : 30,
+            rainfall: i < pSums.length ? (pSums[i] as num).toDouble() : 0.0,
+          ));
+        }
+      } else {
+        throw Exception('Open-Meteo returned status code ${resp.statusCode}');
+      }
+    } catch (_) {
+      weatherData = {
+        'temp': 27.5,
+        'temp_max': 29.8,
+        'temp_min': 20.2,
+        'humidity': 68.0,
+        'rain_24h': 0.0,
+        'rain_7d': 5.0,
+        'rain_prob_max': 20,
+        'wind': 10.0,
+        'solar': 20.0,
+        'et0': 4.2,
+        'vpd': 1.42,
+        'date_str': todayStr,
+      };
+    }
+
+    if (forecastList.isEmpty) {
+      for (int i = 0; i < 7; i++) {
+        final fcDate = now.add(Duration(days: i)).toIso8601String().substring(0, 10);
+        forecastList.add(ForecastDayItem(
+          date: fcDate,
+          tempMin: 20.0,
+          tempMax: 29.0,
+          rainProbability: 25,
+          rainfall: 0.0,
+        ));
+      }
+    }
+
+    return (
+      weatherData: weatherData,
+      forecastList: forecastList,
+      smSurface: smSurface,
+      smRoot: smRoot,
+      soilTemp: soilTemp,
+    );
   }
 }

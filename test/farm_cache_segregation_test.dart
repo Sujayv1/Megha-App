@@ -667,5 +667,171 @@ void main() {
       expect(metrics.fapar, isNull);
       expect(metrics.cropVigorStatus, equals('AWAITING SATELLITE PASS'));
     });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // STALE-WHILE-REVALIDATE & ZERO-LATENCY LOCATION SWITCHING TESTS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    test('T. Stale-While-Revalidate: Cached farm data appears immediately without clearing globalDataNotifier', () async {
+      final farmA = SavedFarmLocation(
+        id: 'swr_farm_a',
+        name: 'Davangere Green Farm',
+        latitude: 14.4644,
+        longitude: 75.9218,
+        createdAt: DateTime.now(),
+      );
+
+      final snapA = createMockData(
+        farmId: farmA.id,
+        farmName: farmA.name,
+        lat: farmA.latitude,
+        lon: farmA.longitude,
+        ndvi: 0.68,
+        temp: 29.5,
+        timestamp: DateTime.now(),
+      );
+
+      await service.saveDataForFarm(farmA.id, snapA);
+
+      // Select farmA via selectLocation
+      final result = await service.selectLocation(farmA);
+
+      expect(result, isNotNull);
+      expect(result!.farmId, equals(farmA.id));
+      expect(service.globalDataNotifier.value, isNotNull);
+      expect(service.globalDataNotifier.value!.farmId, equals(farmA.id));
+      expect(service.globalDataNotifier.value!.sections['1_weather_and_atmosphere']!.first.value, equals(29.5));
+    });
+
+    test('U. Stale-While-Revalidate: Stale cached data (>15 min) renders immediately without clearing UI', () async {
+      final farmB = SavedFarmLocation(
+        id: 'swr_farm_b_stale',
+        name: 'Bangalore Outskirts',
+        latitude: 12.9716,
+        longitude: 77.5946,
+        createdAt: DateTime.now(),
+      );
+
+      // Cached 30 minutes ago (> 15 min TTL)
+      final staleData = createMockData(
+        farmId: farmB.id,
+        farmName: farmB.name,
+        lat: farmB.latitude,
+        lon: farmB.longitude,
+        ndvi: 0.42,
+        temp: 24.0,
+        timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
+      );
+
+      await service.saveDataForFarm(farmB.id, staleData);
+
+      // selectLocation should return cached data immediately (0ms) without blanking globalDataNotifier
+      final immediateResult = await service.selectLocation(farmB);
+
+      expect(immediateResult, isNotNull);
+      expect(immediateResult!.farmId, equals(farmB.id));
+      expect(service.globalDataNotifier.value, isNotNull);
+      expect(service.globalDataNotifier.value!.farmId, equals(farmB.id));
+      expect(service.globalDataNotifier.value!.sections['1_weather_and_atmosphere']!.first.value, equals(24.0));
+    });
+
+    test('V. Stale-While-Revalidate: Switching Farm A -> Farm B never displays Farm A data for Farm B', () async {
+      final farmA = SavedFarmLocation(
+        id: 'swr_switch_a',
+        name: 'Farm Alpha',
+        latitude: 14.4644,
+        longitude: 75.9218,
+        createdAt: DateTime.now(),
+      );
+      final farmB = SavedFarmLocation(
+        id: 'swr_switch_b',
+        name: 'Farm Beta',
+        latitude: 18.5204,
+        longitude: 73.8567,
+        createdAt: DateTime.now(),
+      );
+
+      final snapA = createMockData(
+        farmId: farmA.id,
+        farmName: farmA.name,
+        lat: farmA.latitude,
+        lon: farmA.longitude,
+        ndvi: 0.72,
+        temp: 32.0,
+      );
+      final snapB = createMockData(
+        farmId: farmB.id,
+        farmName: farmB.name,
+        lat: farmB.latitude,
+        lon: farmB.longitude,
+        ndvi: 0.28,
+        temp: 21.0,
+      );
+
+      await service.saveDataForFarm(farmA.id, snapA);
+      await service.saveDataForFarm(farmB.id, snapB);
+
+      // Select Farm A
+      await service.selectLocation(farmA);
+      expect(service.activeLocationNotifier.value?.id, equals(farmA.id));
+      expect(service.globalDataNotifier.value!.farmId, equals(farmA.id));
+      expect(service.globalDataNotifier.value!.sections['1_weather_and_atmosphere']!.first.value, equals(32.0));
+
+      // Switch to Farm B
+      await service.selectLocation(farmB);
+      expect(service.activeLocationNotifier.value?.id, equals(farmB.id));
+      expect(service.globalDataNotifier.value!.farmId, equals(farmB.id));
+      expect(service.globalDataNotifier.value!.sections['1_weather_and_atmosphere']!.first.value, equals(21.0));
+
+      // Switch back to Farm A
+      await service.selectLocation(farmA);
+      expect(service.activeLocationNotifier.value?.id, equals(farmA.id));
+      expect(service.globalDataNotifier.value!.farmId, equals(farmA.id));
+      expect(service.globalDataNotifier.value!.sections['1_weather_and_atmosphere']!.first.value, equals(32.0));
+    });
+
+    test('W. Stale-While-Revalidate: Background refresh cannot overwrite currently selected farm', () async {
+      final farmA = SavedFarmLocation(
+        id: 'swr_race_a',
+        name: 'Farm A',
+        latitude: 14.4644,
+        longitude: 75.9218,
+        createdAt: DateTime.now(),
+      );
+      final farmB = SavedFarmLocation(
+        id: 'swr_race_b',
+        name: 'Farm B',
+        latitude: 18.5204,
+        longitude: 73.8567,
+        createdAt: DateTime.now(),
+      );
+
+      final snapA = createMockData(farmId: farmA.id, farmName: farmA.name, lat: farmA.latitude, lon: farmA.longitude, temp: 30.0);
+      final snapB = createMockData(farmId: farmB.id, farmName: farmB.name, lat: farmB.latitude, lon: farmB.longitude, temp: 22.0);
+
+      await service.saveDataForFarm(farmA.id, snapA);
+      await service.saveDataForFarm(farmB.id, snapB);
+
+      // Select Farm A
+      await service.selectLocation(farmA);
+      expect(service.currentFarmId, equals(farmA.id));
+
+      // Simulate switching to Farm B
+      await service.selectLocation(farmB);
+      expect(service.currentFarmId, equals(farmB.id));
+      expect(service.globalDataNotifier.value!.farmId, equals(farmB.id));
+
+      // If Farm A background refresh finishes now and attempts to save snapshot:
+      final lateFreshSnapA = createMockData(farmId: farmA.id, farmName: farmA.name, lat: farmA.latitude, lon: farmA.longitude, temp: 31.5);
+      await service.saveFarmSnapshot(farmA.id, lateFreshSnapA);
+
+      // Verify Farm B data remains on UI because active farm is Farm B
+      expect(service.globalDataNotifier.value!.farmId, equals(farmB.id));
+      expect(service.globalDataNotifier.value!.sections['1_weather_and_atmosphere']!.first.value, equals(22.0));
+
+      // Verify Farm A disk/memory partition was updated accurately
+      final retrievedA = await service.getDataForFarm(farmA.id);
+      expect(retrievedA!.sections['1_weather_and_atmosphere']!.first.value, equals(31.5));
+    });
   });
 }

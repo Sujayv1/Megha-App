@@ -89,6 +89,12 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
     _loadInitialData();
   }
 
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadInitialData() async {
     final reports = await SoilStorageService.instance.getSavedReports();
 

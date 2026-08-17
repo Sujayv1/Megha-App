@@ -4,6 +4,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_storage_service.dart';
 import 'features/soil_analysis/screens/home_screen.dart';
+import 'features/soil_analysis/services/agricultural_monitoring_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,8 +30,6 @@ class FarmSenseApp extends StatefulWidget {
 }
 
 class _FarmSenseAppState extends State<FarmSenseApp> {
-  // Store authentication Future once in initState to avoid anti-pattern of
-  // recreating the Future on every build call.
   late final Future<bool> _authFuture;
 
   @override
@@ -42,7 +41,16 @@ class _FarmSenseAppState extends State<FarmSenseApp> {
       DeviceOrientation.portraitDown,
     ]);
 
-    _authFuture = AuthStorageService.instance.isLoggedIn();
+    _authFuture = _initializeStartupServices();
+  }
+
+  Future<bool> _initializeStartupServices() async {
+    // Concurrently initialize persisted farm locations and verify login status
+    final results = await Future.wait([
+      AuthStorageService.instance.isLoggedIn(),
+      AgriculturalMonitoringService.instance.initSavedLocations(),
+    ]);
+    return results[0] as bool;
   }
 
   @override

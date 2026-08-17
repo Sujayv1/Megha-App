@@ -16,6 +16,17 @@ class MandiScreen extends StatefulWidget {
 class _MandiScreenState extends State<MandiScreen> {
   final ScrollController _scrollController = ScrollController();
 
+  static final List<String> _sortedStates = List<String>.unmodifiable(
+    MandiService.indianStatesDistricts.keys.toList()..sort(),
+  );
+
+  static final Map<String, List<String>> _sortedDistrictsByState = {
+    for (final entry in MandiService.indianStatesDistricts.entries)
+      entry.key: List<String>.unmodifiable(
+        List<String>.from(entry.value)..sort(),
+      ),
+  };
+
   String _selectedState = '';
   String _selectedDistrict = '';
   String _selectedCrop = '';
@@ -30,22 +41,11 @@ class _MandiScreenState extends State<MandiScreen> {
     super.dispose();
   }
 
-  List<String> get _availableStates {
-    final list = MandiService.indianStatesDistricts.keys.toList();
-    list.sort();
-    return list;
-  }
+  List<String> get _availableStates => _sortedStates;
 
   List<String> get _availableDistricts {
-    if (_selectedState.isEmpty ||
-        !MandiService.indianStatesDistricts.containsKey(_selectedState)) {
-      return [];
-    }
-    final list = List<String>.from(
-      MandiService.indianStatesDistricts[_selectedState]!,
-    );
-    list.sort();
-    return list;
+    if (_selectedState.isEmpty) return const [];
+    return _sortedDistrictsByState[_selectedState] ?? const [];
   }
 
   String _formatDateWithTag(String dateStr) {
