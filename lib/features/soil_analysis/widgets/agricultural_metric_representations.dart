@@ -60,7 +60,6 @@ class ConditionGauge extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     gradient: LinearGradient(
                       colors: effectiveGradient,
-                      stops: const [0.15, 0.55, 0.9],
                     ),
                     boxShadow: [
                       BoxShadow(

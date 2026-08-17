@@ -1,8 +1,8 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:plant_project/features/soil_analysis/services/agricultural_monitoring_service.dart';
-import 'package:plant_project/features/soil_analysis/services/sentinel2_observation_service.dart';
-import 'package:plant_project/features/soil_analysis/services/vegetation_index_engine.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

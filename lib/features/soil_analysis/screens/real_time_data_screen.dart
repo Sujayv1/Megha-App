@@ -1196,6 +1196,13 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
             item.name.contains('NDRE') ||
             item.name.contains('Leaf Area Index') ||
             item.name.contains('Fraction of Absorbed PAR') ||
+            item.name.contains('Sentinel-2') ||
+            item.name.contains('(B2)') ||
+            item.name.contains('(B3)') ||
+            item.name.contains('(B4)') ||
+            item.name.contains('(B5)') ||
+            item.name.contains('(B8)') ||
+            item.name.contains('(B11)') ||
             item.name.contains('Vapour Pressure Deficit') ||
             item.name.contains('Surface Soil Moisture') ||
             item.name.contains('Root-Zone Soil Moisture') ||
@@ -1441,29 +1448,31 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
       final isFavorable = v >= _selectedStage.expectedNdviMin;
       return ConditionGauge(
         normalizedPosition: v.clamp(0.0, 1.0),
-        leftLabel: 'Low',
-        centerLabel: 'Moderate',
-        rightLabel: 'High',
+        leftLabel: '0.0 (Sparse)',
+        centerLabel: '0.50',
+        rightLabel: '1.0 (Dense)',
         targetRangeText:
-            'Expected Range: ${_selectedStage.expectedNdviMin.toStringAsFixed(2)} – ${_selectedStage.expectedNdviMax.toStringAsFixed(2)}',
+            'Stage Range: ${_selectedStage.expectedNdviMin.toStringAsFixed(2)} – ${_selectedStage.expectedNdviMax.toStringAsFixed(2)}',
         activeColor: isFavorable
             ? AppColors.leafGreen
-            : const Color(0xFFD97706),
+            : (v >= 0.25 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
         gradientColors: const [
-          Color(0xFFF59E0B), // Sparse / Low (Amber)
-          Color(0xFF10B981), // Moderate Canopy (Green)
-          Color(0xFF047857), // Dense / Healthy (Emerald)
+          Color(0xFFEF4444), // Very Low / Stressed (< 0.25)
+          Color(0xFFF59E0B), // Sparse / Emerging (0.25 - 0.40)
+          Color(0xFF10B981), // Moderate Canopy (0.40 - 0.60)
+          Color(0xFF047857), // Dense / Optimal (0.60 - 1.0)
         ],
       );
     }
     if (name.contains('EVI')) {
       return ConditionGauge(
         normalizedPosition: v.clamp(0.0, 1.0),
-        leftLabel: 'Low',
-        centerLabel: 'Moderate',
-        rightLabel: 'High',
-        activeColor: v >= 0.40 ? AppColors.leafGreen : const Color(0xFFD97706),
+        leftLabel: '0.0 (Sparse)',
+        centerLabel: '0.50',
+        rightLabel: '1.0 (Dense)',
+        activeColor: v >= 0.35 ? AppColors.leafGreen : const Color(0xFFD97706),
         gradientColors: const [
+          Color(0xFFEF4444),
           Color(0xFFF59E0B),
           Color(0xFF10B981),
           Color(0xFF047857),
@@ -1472,13 +1481,14 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     }
     if (name.contains('NDWI')) {
       return ConditionGauge(
-        normalizedPosition: ((v + 0.5) / 1.0).clamp(0.0, 1.0),
-        leftLabel: 'Deficit',
-        centerLabel: 'Moderate',
-        rightLabel: 'Optimal',
+        normalizedPosition: ((v + 0.30) / 0.70).clamp(0.0, 1.0),
+        leftLabel: 'Deficit (<0.0)',
+        centerLabel: 'Moderate (0.1)',
+        rightLabel: 'Hydrated (>0.25)',
         activeColor: const Color(0xFF0EA5E9),
         gradientColors: const [
-          Color(0xFFF59E0B), // Water Deficit (Amber)
+          Color(0xFFEF4444), // Water Deficit (Amber/Red)
+          Color(0xFFF59E0B), // Moderate
           Color(0xFF0EA5E9), // Moderate Hydration (Cyan)
           Color(0xFF0284C7), // Optimal Turgor (Deep Blue)
         ],
@@ -1486,12 +1496,13 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     }
     if (name.contains('NDRE')) {
       return ConditionGauge(
-        normalizedPosition: (v / 0.8).clamp(0.0, 1.0),
-        leftLabel: 'Low',
-        centerLabel: 'Moderate',
-        rightLabel: 'High',
-        activeColor: AppColors.leafGreen,
+        normalizedPosition: (v / 0.60).clamp(0.0, 1.0),
+        leftLabel: '0.0 (Low)',
+        centerLabel: '0.30 (Active)',
+        rightLabel: '0.60+ (High)',
+        activeColor: v >= 0.25 ? AppColors.leafGreen : const Color(0xFFD97706),
         gradientColors: const [
+          Color(0xFFEF4444),
           Color(0xFFF59E0B),
           Color(0xFF10B981),
           Color(0xFF047857),
@@ -1501,11 +1512,11 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     if (name.contains('Leaf Area Index') || name.contains('LAI')) {
       return ConditionGauge(
         normalizedPosition: (v / 5.0).clamp(0.0, 1.0),
-        leftLabel: 'Sparse',
-        centerLabel: 'Moderate',
-        rightLabel: 'Dense',
+        leftLabel: '0.0 Sparse',
+        centerLabel: '2.5 Moderate',
+        rightLabel: '5.0+ Dense',
         targetRangeText: 'Target: 1.5 – 4.0 m²/m²',
-        activeColor: const Color(0xFF059669),
+        activeColor: (v >= 1.5 && v <= 4.5) ? const Color(0xFF059669) : const Color(0xFFD97706),
         gradientColors: const [
           Color(0xFFF59E0B),
           Color(0xFF10B981),
@@ -1516,14 +1527,98 @@ class _RealTimeDataScreenState extends State<RealTimeDataScreen>
     if (name.contains('Fraction of Absorbed PAR') || name.contains('FAPAR')) {
       return ConditionGauge(
         normalizedPosition: v.clamp(0.0, 1.0),
-        leftLabel: 'Low',
-        centerLabel: 'Moderate',
-        rightLabel: 'High',
-        activeColor: AppColors.leafGreen,
+        leftLabel: '0% Absorption',
+        centerLabel: '50%',
+        rightLabel: '100% Full PAR',
+        activeColor: v >= 0.40 ? AppColors.leafGreen : const Color(0xFFD97706),
         gradientColors: const [
           Color(0xFFF59E0B),
           Color(0xFF10B981),
           Color(0xFF047857),
+        ],
+      );
+    }
+    if (name.contains('Sentinel-2 Blue') || name.contains('(B2)')) {
+      return ConditionGauge(
+        normalizedPosition: (v / 0.30).clamp(0.0, 1.0),
+        leftLabel: '0.00',
+        centerLabel: '0.15',
+        rightLabel: '0.30+',
+        activeColor: const Color(0xFF3B82F6),
+        gradientColors: const [
+          Color(0xFF1E3A8A),
+          Color(0xFF3B82F6),
+          Color(0xFF93C5FD),
+        ],
+      );
+    }
+    if (name.contains('Sentinel-2 Green') || name.contains('(B3)')) {
+      return ConditionGauge(
+        normalizedPosition: (v / 0.30).clamp(0.0, 1.0),
+        leftLabel: '0.00',
+        centerLabel: '0.15',
+        rightLabel: '0.30+',
+        activeColor: const Color(0xFF10B981),
+        gradientColors: const [
+          Color(0xFF064E3B),
+          Color(0xFF10B981),
+          Color(0xFF6EE7B7),
+        ],
+      );
+    }
+    if (name.contains('Sentinel-2 Red') || name.contains('(B4)')) {
+      return ConditionGauge(
+        normalizedPosition: (v / 0.35).clamp(0.0, 1.0),
+        leftLabel: '0.00 (High Abs)',
+        centerLabel: '0.18',
+        rightLabel: '0.35+ (Bare Soil)',
+        activeColor: const Color(0xFFEF4444),
+        gradientColors: const [
+          Color(0xFF047857), // Low red = high chlorophyll absorption
+          Color(0xFFF59E0B), // Moderate
+          Color(0xFFEF4444), // High red = bare soil / low absorption
+        ],
+      );
+    }
+    if (name.contains('Sentinel-2 RedEdge-1') || name.contains('(B5)')) {
+      return ConditionGauge(
+        normalizedPosition: (v / 0.40).clamp(0.0, 1.0),
+        leftLabel: '0.00',
+        centerLabel: '0.20',
+        rightLabel: '0.40+',
+        activeColor: const Color(0xFF84CC16),
+        gradientColors: const [
+          Color(0xFF365314),
+          Color(0xFF84CC16),
+          Color(0xFFBEF264),
+        ],
+      );
+    }
+    if (name.contains('Sentinel-2 NIR') || name.contains('(B8)')) {
+      return ConditionGauge(
+        normalizedPosition: (v / 0.60).clamp(0.0, 1.0),
+        leftLabel: '0.00 (Sparse)',
+        centerLabel: '0.30',
+        rightLabel: '0.60+ (Dense)',
+        activeColor: const Color(0xFF059669),
+        gradientColors: const [
+          Color(0xFFF59E0B), // Low NIR = low biomass
+          Color(0xFF10B981), // Moderate
+          Color(0xFF047857), // High NIR = dense mesophyll scattering
+        ],
+      );
+    }
+    if (name.contains('Sentinel-2 SWIR-1') || name.contains('(B11)')) {
+      return ConditionGauge(
+        normalizedPosition: (v / 0.50).clamp(0.0, 1.0),
+        leftLabel: '0.00 (Hydrated)',
+        centerLabel: '0.25',
+        rightLabel: '0.50+ (Dry)',
+        activeColor: const Color(0xFFF97316),
+        gradientColors: const [
+          Color(0xFF0284C7), // High water absorption (low SWIR)
+          Color(0xFFF59E0B), // Moderate
+          Color(0xFFEF4444), // Dry / soil reflection
         ],
       );
     }

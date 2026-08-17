@@ -137,8 +137,8 @@ class Sentinel2ObservationService {
     required double latitude,
     required double longitude,
     required http.Client client,
-    int lookbackDays = 60,
-    double maxCloudPercent = 35.0,
+    int lookbackDays = 90,
+    double maxCloudPercent = 80.0,
   }) async {
     final now = DateTime.now();
     final startDate = now
@@ -151,17 +151,15 @@ class Sentinel2ObservationService {
       final stacUri = Uri.parse(_stacSearchEndpoint);
       final reqBody = jsonEncode({
         'collections': ['sentinel-2-l2a'],
-        'bbox': [
-          longitude - 0.02,
-          latitude - 0.02,
-          longitude + 0.02,
-          latitude + 0.02,
-        ],
+        'intersects': {
+          'type': 'Point',
+          'coordinates': [longitude, latitude],
+        },
         'datetime': '${startDate}T00:00:00Z/${endDate}T23:59:59Z',
         'query': {
           'eo:cloud_cover': {'lt': maxCloudPercent},
         },
-        'limit': 1,
+        'limit': 5,
         'sortby': [
           {'field': 'properties.datetime', 'direction': 'desc'},
         ],
@@ -173,18 +171,24 @@ class Sentinel2ObservationService {
             headers: {'Content-Type': 'application/json'},
             body: reqBody,
           )
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final features = (data['features'] as List?) ?? [];
 
-        if (features.isNotEmpty) {
-          final feature = features.first as Map<String, dynamic>;
-          final sceneId = feature['id']?.toString();
+        String? lastDiscoveredSceneId;
+        Map<String, String>? lastAssetMap;
+        double lastCloud = 0.0;
+        DateTime lastObsDt = now;
+        int lastAgeDays = 0;
+
+        for (final item in features) {
+          if (item is! Map<String, dynamic>) continue;
+          final sceneId = item['id']?.toString();
           final properties =
-              feature['properties'] as Map<String, dynamic>? ?? {};
-          final assets = feature['assets'] as Map<String, dynamic>? ?? {};
+              item['properties'] as Map<String, dynamic>? ?? {};
+          final assets = item['assets'] as Map<String, dynamic>? ?? {};
 
           final dtStr = (properties['datetime'] as String?) ?? endDate;
           final cloud =
@@ -192,43 +196,30 @@ class Sentinel2ObservationService {
           final obsDt = DateTime.tryParse(dtStr) ?? now;
           final ageDays = now.difference(obsDt).inDays.clamp(0, 365);
 
+          lastDiscoveredSceneId ??= sceneId;
+          lastCloud = cloud;
+          lastObsDt = obsDt;
+          lastAgeDays = ageDays;
+
           // Extract actual COG raster asset URLs for each spectral band
           final assetMap = <String, String>{};
-          if (assets['blue'] is Map && assets['blue']['href'] != null) {
-            assetMap['B02_blue'] = assets['blue']['href'].toString();
-          } else if (assets['B02'] is Map && assets['B02']['href'] != null) {
-            assetMap['B02_blue'] = assets['B02']['href'].toString();
+          void extractAsset(String standardKey, List<String> candidateKeys) {
+            for (final k in candidateKeys) {
+              if (assets[k] is Map && assets[k]['href'] != null) {
+                assetMap[standardKey] = assets[k]['href'].toString();
+                break;
+              }
+            }
           }
 
-          if (assets['green'] is Map && assets['green']['href'] != null) {
-            assetMap['B03_green'] = assets['green']['href'].toString();
-          } else if (assets['B03'] is Map && assets['B03']['href'] != null) {
-            assetMap['B03_green'] = assets['B03']['href'].toString();
-          }
+          extractAsset('B02_blue', ['blue', 'B02', 'b02', 'B2', 'b2']);
+          extractAsset('B03_green', ['green', 'B03', 'b03', 'B3', 'b3']);
+          extractAsset('B04_red', ['red', 'B04', 'b04', 'B4', 'b4']);
+          extractAsset('B05_red_edge', ['rededge1', 'B05', 'b05', 'B5', 'b5']);
+          extractAsset('B08_nir', ['nir', 'B08', 'b08', 'B8', 'b8', 'nir08']);
+          extractAsset('B11_swir', ['swir16', 'B11', 'b11', 'swir1', 'B11_swir']);
 
-          if (assets['red'] is Map && assets['red']['href'] != null) {
-            assetMap['B04_red'] = assets['red']['href'].toString();
-          } else if (assets['B04'] is Map && assets['B04']['href'] != null) {
-            assetMap['B04_red'] = assets['B04']['href'].toString();
-          }
-
-          if (assets['rededge1'] is Map && assets['rededge1']['href'] != null) {
-            assetMap['B05_red_edge'] = assets['rededge1']['href'].toString();
-          } else if (assets['B05'] is Map && assets['B05']['href'] != null) {
-            assetMap['B05_red_edge'] = assets['B05']['href'].toString();
-          }
-
-          if (assets['nir'] is Map && assets['nir']['href'] != null) {
-            assetMap['B08_nir'] = assets['nir']['href'].toString();
-          } else if (assets['B08'] is Map && assets['B08']['href'] != null) {
-            assetMap['B08_nir'] = assets['B08']['href'].toString();
-          }
-
-          if (assets['swir16'] is Map && assets['swir16']['href'] != null) {
-            assetMap['B11_swir'] = assets['swir16']['href'].toString();
-          } else if (assets['B11'] is Map && assets['B11']['href'] != null) {
-            assetMap['B11_swir'] = assets['B11']['href'].toString();
-          }
+          lastAssetMap ??= assetMap;
 
           // Sample all 6 spectral bands concurrently from the real COG raster assets
           final sampleFutures = await Future.wait([
@@ -299,18 +290,20 @@ class Sentinel2ObservationService {
               b8: b8Val,
               b11: b11Val,
             );
-          } else {
-            return Sentinel2Observation.unavailable(
-              date: obsDt,
-              reason: sceneId != null
-                  ? 'Scene $sceneId discovered (${cloud.toStringAsFixed(1)}% cloud), but pixel sampling at ($latitude, $longitude) was clouded or outside raster extent.'
-                  : 'Sentinel-2 L2A scene found, but pixel sampling returned invalid values.',
-              sceneId: sceneId,
-              assetUrls: assetMap.isNotEmpty ? assetMap : null,
-              cloudPercentage: double.parse(cloud.toStringAsFixed(1)),
-              dataAgeDays: ageDays,
-            );
           }
+        }
+
+        if (features.isNotEmpty) {
+          return Sentinel2Observation.unavailable(
+            date: lastObsDt,
+            reason: lastDiscoveredSceneId != null
+                ? 'Scene $lastDiscoveredSceneId discovered (${lastCloud.toStringAsFixed(1)}% cloud), but pixel sampling at ($latitude, $longitude) was clouded or outside raster extent.'
+                : 'Sentinel-2 L2A scene found, but pixel sampling returned invalid values.',
+            sceneId: lastDiscoveredSceneId,
+            assetUrls: lastAssetMap,
+            cloudPercentage: double.parse(lastCloud.toStringAsFixed(1)),
+            dataAgeDays: lastAgeDays,
+          );
         }
       }
     } catch (_) {
@@ -340,7 +333,7 @@ class Sentinel2ObservationService {
           'https://titiler.xyz/cog/point/$longitude,$latitude?url=${Uri.encodeComponent(cogUrl)}';
       final response = await client
           .get(Uri.parse(sampleUrl))
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
