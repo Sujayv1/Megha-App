@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'megha_rag_service.dart';
+import '../../../models/visual_rag_models.dart';
 
 class ChatMessageModel {
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime timestamp;
-  final List<Citation>? citations;
+  final List<DocumentCitation>? citations;
 
   const ChatMessageModel({
     required this.role,
@@ -31,7 +31,7 @@ class ChatMessageModel {
             ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now()
             : DateTime.now(),
         citations: (json['citations'] as List<dynamic>?)
-            ?.map((c) => Citation.fromJson(c as Map<String, dynamic>))
+            ?.map((c) => DocumentCitation.fromJson(c as Map<String, dynamic>))
             .toList(),
       );
 }

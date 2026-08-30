@@ -4,8 +4,9 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/hero_agent_widget.dart';
+import '../../../models/visual_rag_models.dart';
+import '../../../services/visual_rag_service.dart';
 import '../services/megha_chat_storage_service.dart';
-import '../services/megha_rag_service.dart';
 import '../widgets/glass_card.dart';
 
 class MeghaAiChatScreen extends StatefulWidget {
@@ -186,8 +187,8 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     await _autoSaveCurrentSession();
 
     try {
-      // Execute MeghaRag Grounded RAG Pipeline (Strictly from Chroma DB Documents)
-      final ragResponse = await MeghaRagService.instance.query(text);
+      // Execute Visual RAG Backend Retrieval Pipeline (Qdrant Cloud & Gemini Vision)
+      final ragResponse = await VisualRagService.instance.ask(text);
 
       if (mounted) {
         setState(() {
@@ -213,7 +214,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
             ChatMessageModel(
               role: 'assistant',
               content:
-                  '⚠️ Could not connect to Megha AI RAG database. Please check network connection and try again.',
+                  '⚠️ Could not connect to the Visual RAG assistant. Please check your network connection and try again.',
               timestamp: DateTime.now(),
             ),
           );
@@ -278,7 +279,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 9),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -287,10 +288,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.all(7.5),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: AppColors.leafGreen.withValues(alpha: 0.2),
                     ),
@@ -298,15 +299,15 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                   child: const Icon(
                     Icons.arrow_back_ios_new_rounded,
                     color: AppColors.textPrimary,
-                    size: 18,
+                    size: 16.5,
                   ),
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Text(
                 'Megha AI',
                 style: GoogleFonts.poppins(
-                  fontSize: 21,
+                  fontSize: 19,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
@@ -319,10 +320,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
               GestureDetector(
                 onTap: _startNewChat,
                 child: Container(
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.all(7.5),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: AppColors.leafGreen.withValues(alpha: 0.2),
                     ),
@@ -330,7 +331,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                   child: const Icon(
                     Icons.add_rounded,
                     color: AppColors.leafGreen,
-                    size: 18,
+                    size: 16.5,
                   ),
                 ),
               ),
@@ -339,10 +340,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
               GestureDetector(
                 onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
                 child: Container(
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.all(7.5),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: AppColors.leafGreen.withValues(alpha: 0.2),
                     ),
@@ -350,7 +351,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                   child: const Icon(
                     Icons.history_rounded,
                     color: AppColors.textPrimary,
-                    size: 18,
+                    size: 16.5,
                   ),
                 ),
               ),
@@ -566,7 +567,10 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
           ],
           Flexible(
             child: Padding(
-              padding: EdgeInsets.only(right: isUser ? 0 : 20),
+              padding: EdgeInsets.only(
+                left: isUser ? 26 : 0,
+                right: isUser ? 0 : 20, 
+              ),
               child: RepaintBoundary(
                 child: GlassCard(
                   tint: isUser
@@ -656,9 +660,9 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.1, end: 0.0);
   }
 
-  // ── Grounded Citations Widget (Clean & Minimal) ─────────────────────────────
+  // ── Grounded Citations Widget (Clean & Minimal Text Only) ───────────────────
 
-  Widget _buildCitationsWidget(List<Citation> citations) {
+  Widget _buildCitationsWidget(List<DocumentCitation> citations) {
     return Padding(
       padding: const EdgeInsets.only(top: 10, bottom: 2),
       child: Column(
@@ -696,41 +700,13 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                     color: AppColors.leafGreen.withValues(alpha: 0.25),
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.leafGreen.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        'SOURCE ${c.sourceId}',
-                        style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.leafGreen,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        c.fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  c.formattedCitation,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               );
             }).toList(),
