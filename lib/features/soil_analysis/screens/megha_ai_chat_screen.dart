@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -605,6 +607,12 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.leafGreen,
                               ),
+                              listIndent: 18,
+                              listBulletPadding: const EdgeInsets.only(
+                                right: 6,
+                                top: 2,
+                              ),
+                              blockSpacing: 8,
                               h1: GoogleFonts.poppins(
                                 fontSize: 15.5,
                                 fontWeight: FontWeight.w800,
@@ -615,18 +623,65 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.leafGreen,
                               ),
+                              h3: GoogleFonts.poppins(
+                                fontSize: 14.0,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.leafGreen,
+                              ),
+                              code: GoogleFonts.firaCode(
+                                fontSize: 12.5,
+                                color: AppColors.leafGreen,
+                                backgroundColor:
+                                    AppColors.leafGreen.withValues(
+                                      alpha: 0.08,
+                                    ),
+                              ),
+                              blockquote: GoogleFonts.poppins(
+                                fontSize: 13.0,
+                                fontStyle: FontStyle.italic,
+                                color: AppColors.textPrimary,
+                                height: 1.4,
+                              ),
+                              blockquoteDecoration: BoxDecoration(
+                                color: AppColors.leafGreen.withValues(
+                                  alpha: 0.06,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                                border: const Border(
+                                  left: BorderSide(
+                                    color: AppColors.leafGreen,
+                                    width: 3.5,
+                                  ),
+                                ),
+                              ),
+                              blockquotePadding:
+                                  const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
                             ),
                       ),
                       if (message.citations != null &&
                           message.citations!.isNotEmpty)
                         _buildCitationsWidget(message.citations!),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          color: AppColors.textMuted,
-                        ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: isUser
+                            ? MainAxisAlignment.end
+                            : MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.leafGreen,
+                            ),
+                          ),
+                          if (!isUser)
+                            _buildCopyButton(message.content),
+                        ],
                       ),
                     ],
                   ),
@@ -658,6 +713,102 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
         ],
       ),
     ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.1, end: 0.0);
+  }
+
+  // ── Copy Answer Button ───────────────────────────────────────────────────────
+
+  Widget _buildCopyButton(String textToCopy) {
+    return GestureDetector(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: textToCopy));
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            padding: EdgeInsets.zero,
+            content: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.86),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.leafGreen.withValues(alpha: 0.35),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.leafGreen.withValues(alpha: 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: AppColors.leafGreen.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_rounded,
+                          color: AppColors.leafGreen,
+                          size: 15,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Copied to clipboard',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(2.0),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.copy_rounded,
+              size: 12.5,
+              color: AppColors.leafGreen.withValues(alpha: 0.85),
+            ),
+            const SizedBox(width: 3.5),
+            Text(
+              'Copy',
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.leafGreen.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Grounded Citations Widget (Clean & Minimal Text Only) ───────────────────

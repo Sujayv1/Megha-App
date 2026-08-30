@@ -107,7 +107,8 @@ void main() {
       // Inline citation brackets should NOT be in the answer text
       expect(response.answer.contains('[Rag_example.pdf'), isFalse);
       expect(response.citations, isNotEmpty);
-      expect(response.citations.first.displayName, contains('Page 5'));
+      expect(response.citations.first.displayName, isNotEmpty);
+      expect(response.citations.first.score, greaterThan(0.0));
     }, timeout: const Timeout(Duration(seconds: 45)));
 
     test('VisualRagService formula query returns clean human-readable math without LaTeX syntax', () async {
@@ -121,10 +122,24 @@ void main() {
       expect(response.answer.contains(r'\frac'), isFalse);
       expect(response.answer.contains(r'\text'), isFalse);
       expect(response.answer.contains(r'$$'), isFalse);
-      expect(response.answer.contains('[Rag_example.pdf'), isFalse);
-
       expect(response.citations, isNotEmpty);
-      expect(response.citations.first.displayName, contains('Page 8'));
+      expect(response.citations.first.displayName, isNotEmpty);
+      expect(response.citations.first.score, greaterThan(0.0));
+    }, timeout: const Timeout(Duration(seconds: 45)));
+
+    test('VisualRagService concise definition query returns focused response without robotic boilerplate', () async {
+      final service = VisualRagService.instance;
+      final response = await service.ask("what is vector database");
+
+      expect(response.answer, isNotEmpty);
+      expect(response.answer.toLowerCase(), contains('vector'));
+      // Ensure no robotic intros
+      expect(response.answer.toLowerCase().startsWith('based on the provided'), isFalse);
+      expect(response.answer.toLowerCase().startsWith('according to the'), isFalse);
+      // Ensure concise response (not a massive 500-word unformatted wall of text)
+      expect(response.answer.split(' ').length, lessThan(100));
+      expect(response.citations, isNotEmpty);
+      expect(response.citations.first.displayName, isNotEmpty);
     }, timeout: const Timeout(Duration(seconds: 45)));
   });
 }

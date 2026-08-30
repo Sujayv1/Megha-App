@@ -133,17 +133,21 @@ class VisualRagService {
         ? _geminiApiKey
         : AppConstants.geminiApiKey;
 
-    final prompt = """You are an expert Visual Document and Agricultural Intelligence Assistant.
+    final prompt = """You are Megha AI, an intelligent, concise, and natural visual document and agricultural assistant.
 Provided PDF page images:
 ${pageLabels.join("\n")}
 
-Formatting & Content Guidelines:
-1. Carefully inspect all visual content, tables, charts, financial figures, country statistics, metrics, and text across the provided pages to accurately and thoroughly answer the user's question.
-2. Formulate formulas and mathematical equations using clean, human-readable plain text or markdown notation (e.g. Percentage Change = [ (New Value - Old Value) / Old Value ] × 100).
-3. NEVER output raw LaTeX syntax (DO NOT use \\frac, \\text, \\left(, \\right), \\times, or \$\$).
-4. If citing numbers, revenue, or metrics, provide the exact numbers from the tables/text.
-5. Reference the source document and page number in brackets for every finding using: [filename, Page X].
-6. If not found, state: "I cannot answer this question based on the provided document pages."
+Response Intelligence & Formatting Guidelines:
+1. ADAPTIVE LENGTH & INTENT:
+   - For simple questions, definitions, facts, or numbers (e.g. "what is X", "what's the revenue of Y"): Provide a crisp, concise, direct response (1-3 sentences) with key terms in **bold**. Do NOT dump excessive unrequested details.
+   - For complex queries, "explain", "compare", "list", or multi-part questions: Provide a structured response using clean markdown bullet points (`- **Title**: description`), numbered lists, or short sections.
+   - For formulas: State in clean plain text notation (e.g. `Percentage Change = [ (New Value - Old Value) / Old Value ] × 100`). NEVER output raw LaTeX (no \\frac, \\text, \\left, \\right, \$\$).
+2. TONE & DIRECTNESS:
+   - Answer directly like a smart human expert.
+   - NEVER use robotic meta-intros like "Based on the provided document pages...", "According to the uploaded documents...", or "Here is the definition...". Start directly with the answer.
+3. CITATIONS:
+   - At the very end of your response, add the source reference tag: [filename, Page X].
+4. If not found in the documents, state clearly and helpfully that the specific information is not mentioned in the uploaded document.
 
 User Question: $query""";
 
@@ -254,7 +258,7 @@ User Question: $query""";
       finalCitations = const [];
     }
 
-    // 5. Clean & Format Answer Text (Strip inline [Document.pdf, Page X] and clean LaTeX math)
+    // 5. Clean & Format Answer Text (Strip inline [Document.pdf, Page X], clean LaTeX math, and remove robotic intros)
     final cleanAnswer = _cleanAnswerText(answerText);
 
     return VisualRagResponse(
@@ -264,17 +268,26 @@ User Question: $query""";
     );
   }
 
-  /// Sanitizes mathematical formulas and removes redundant inline citation brackets from the answer text.
+  /// Sanitizes mathematical formulas, strips robotic intro phrases, and removes redundant inline citation brackets.
   String _cleanAnswerText(String raw) {
     String text = raw;
 
-    // 1. Clean LaTeX \text{...}, \mathrm{...}, etc.
+    // 1. Strip robotic boilerplate intros if present
+    text = text.replaceFirst(
+      RegExp(
+        r'^(?:Based on the (?:provided|uploaded) document(?:s| pages)?,?\s*(?:here is (?:the|a) |the |we can see that )?|According to the (?:provided|uploaded) document(?:s| pages)?,?\s*|Here is (?:the|a) (?:definition|summary|explanation)[^:\n]*:\s*)',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // 2. Clean LaTeX \text{...}, \mathrm{...}, etc.
     text = text.replaceAllMapped(
       RegExp(r'\\(?:text|mathrm|mathbf|mathit|mathsf)\{([^}]*)\}'),
       (m) => m.group(1) ?? '',
     );
 
-    // 2. Clean \frac{numerator}{denominator} -> [ (numerator) / (denominator) ]
+    // 3. Clean \frac{numerator}{denominator} -> [ (numerator) / (denominator) ]
     while (text.contains(r'\frac')) {
       final prev = text;
       text = text.replaceAllMapped(
@@ -284,7 +297,7 @@ User Question: $query""";
       if (text == prev) break;
     }
 
-    // 3. Clean LaTeX delimiters and operators
+    // 4. Clean LaTeX delimiters and operators
     text = text
         .replaceAll(r'\left(', '(')
         .replaceAll(r'\right)', ')')
@@ -306,7 +319,7 @@ User Question: $query""";
         .replaceAll(r'\$', r'$')
         .replaceAll(r'\_', '_');
 
-    // 4. Convert $$ math blocks $$ into clean markdown blockquotes or bold lines
+    // 5. Convert $$ math blocks $$ into clean markdown blockquotes or bold lines
     text = text.replaceAllMapped(
       RegExp(r'\$\$(.*?)\$\$', dotAll: true),
       (m) => '\n\n> **${m.group(1)?.trim()}**\n\n',
@@ -316,14 +329,19 @@ User Question: $query""";
       (m) => '**${m.group(1)?.trim()}**',
     );
 
-    // 5. Clean remaining backslash commands if any
+    // 6. Clean remaining backslash commands if any
     text = text.replaceAllMapped(
       RegExp(r'\\([a-zA-Z]+)'),
       (m) => m.group(1) ?? '',
     );
 
-    // 6. Remove bracketed citation tags from the displayed answer text (including if wrapped in markdown * or _)
-    // E.g. [Rag_example.pdf, Page 5], [Page 5], [SOURCE 1], *[Rag_example.pdf, Page 8]*
+    // 7. Format single-asterisk glued headings into clean Markdown list items: *Heading: text -> - **Heading**: text
+    text = text.replaceAllMapped(
+      RegExp(r'(?:^|\n)\*([a-zA-Z0-9_\- ]+):([^\n]*)'),
+      (m) => '\n- **${m.group(1)?.trim()}**: ${m.group(2)?.trim()}',
+    );
+
+    // 8. Remove bracketed citation tags from the displayed answer text (including if wrapped in markdown * or _)
     text = text.replaceAll(
       RegExp(
         r'[*_~]*\[\s*(?:cited:)?\s*[^\]\n]*?(?:page\s*\d+|source\s*\d+|[a-zA-Z0-9_\-.]+\.pdf)[^\]\n]*?\][*_~]*',
@@ -339,7 +357,7 @@ User Question: $query""";
       '',
     );
 
-    // 7. Clean leftover empty markdown formatting tokens, excessive whitespace, and punctuation artifacts
+    // 9. Clean leftover empty markdown formatting tokens, excessive whitespace, and punctuation artifacts
     text = text.replaceAll(RegExp(r'\*\*\s*\*\*'), '');
     text = text.replaceAll(RegExp(r'\*\s*\*'), '');
     text = text.replaceAll(RegExp(r'[ \t]+'), ' ');
