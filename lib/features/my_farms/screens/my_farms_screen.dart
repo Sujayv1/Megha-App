@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/navigation/navigation_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../crop_recommendation/models/crop_plan_model.dart';
 import '../../crop_recommendation/services/crop_recommendation_storage_service.dart';
@@ -158,18 +159,11 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
     SavedFarmModel farm,
   ) async {
     if (farm.isCultivationStarted) {
-      Navigator.push(
+      SafeNavigator.push(
         context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 300),
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              CultivationStartScreen(
-            farm: farm,
-            startDate: farm.cultivationStartedAt!,
-          ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
+        CultivationStartScreen(
+          farm: farm,
+          startDate: farm.cultivationStartedAt!,
         ),
       );
       return;
@@ -246,11 +240,9 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
                       ),
                       onPressed: () {
                         Navigator.pop(ctx);
-                        Navigator.push(
+                        SafeNavigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const CropRecommendationScreen(),
-                          ),
+                          const CropRecommendationScreen(),
                         );
                       },
                       child: Text(
@@ -319,19 +311,11 @@ class _MyFarmsScreenState extends State<MyFarmsScreen> {
     await _loadFarms();
     if (!context.mounted) return;
 
-    Navigator.push(
+    SafeNavigator.push(
       context,
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 300),
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            CultivationStartScreen(
-          farm: updatedFarm,
-          startDate: pickedDate,
-        ),
-        transitionsBuilder:
-            (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+      CultivationStartScreen(
+        farm: updatedFarm,
+        startDate: pickedDate,
       ),
     );
   }

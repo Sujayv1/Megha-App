@@ -44,7 +44,7 @@ class GlassCard extends StatelessWidget {
       width: width,
       height: height,
       borderRadius: borderRadius,
-      blur: blur,
+      blur: useBlur ? blur : 0,
       opacity: opacity,
       tint: tint,
       gradient: gradient,

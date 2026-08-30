@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/navigation/navigation_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../soil_analysis/screens/home_screen.dart';
 import '../../soil_analysis/widgets/glass_surface.dart';
@@ -95,16 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 400),
-          pageBuilder: (_, animation, secondaryAnimation) => const HomeScreen(),
-          transitionsBuilder: (_, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-        ),
-      );
+      await SafeNavigator.pushReplacement(context, const HomeScreen());
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -323,16 +315,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           GestureDetector(
                             onTap: () async {
-                              final registeredEmail = await Navigator.push<String>(
+                              final registeredEmail = await SafeNavigator.push<String>(
                                 context,
-                                PageRouteBuilder(
-                                  transitionDuration: const Duration(milliseconds: 300),
-                                  pageBuilder: (_, animation, secondaryAnimation) =>
-                                      const SignupScreen(),
-                                  transitionsBuilder: (_, animation, secondaryAnimation, child) {
-                                    return FadeTransition(opacity: animation, child: child);
-                                  },
-                                ),
+                                const SignupScreen(),
                               );
                               if (registeredEmail != null && registeredEmail.isNotEmpty) {
                                 _identifierController.text = registeredEmail;

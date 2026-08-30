@@ -161,10 +161,7 @@ class HomeScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
       child: RepaintBoundary(
         child: GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const MeghaAiChatScreen()),
-          ),
+          onTap: () => _navigateTo(context, const MeghaAiChatScreen()),
           child: GlassCard(
             tint: AppColors.cardCream,
             borderOpacity: 0.25,

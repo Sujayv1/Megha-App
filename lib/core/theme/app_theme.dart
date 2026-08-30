@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -183,12 +182,48 @@ class AppTheme {
           letterSpacing: 0.5,
         ),
       ),
+      drawerTheme: const DrawerThemeData(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SmoothPageTransitionsBuilder(),
+          TargetPlatform.iOS: SmoothPageTransitionsBuilder(),
+          TargetPlatform.windows: SmoothPageTransitionsBuilder(),
+          TargetPlatform.macOS: SmoothPageTransitionsBuilder(),
+          TargetPlatform.linux: SmoothPageTransitionsBuilder(),
         },
+      ),
+    );
+  }
+}
+
+/// Ultra-fluid cubic slide & fade page transitions builder across all platforms.
+class SmoothPageTransitionsBuilder extends PageTransitionsBuilder {
+  const SmoothPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curve = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return FadeTransition(
+      opacity: curve,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.04, 0),
+          end: Offset.zero,
+        ).animate(curve),
+        child: child,
       ),
     );
   }
@@ -209,6 +244,15 @@ class GlassBlur extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (sigmaX <= 0 && sigmaY <= 0) {
+      return RepaintBoundary(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: child,
+        ),
+      );
+    }
+
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
@@ -45,12 +46,11 @@ class _FarmSenseAppState extends State<FarmSenseApp> {
   }
 
   Future<bool> _initializeStartupServices() async {
-    // Concurrently initialize persisted farm locations and verify login status
-    final results = await Future.wait([
-      AuthStorageService.instance.isLoggedIn(),
-      AgriculturalMonitoringService.instance.initSavedLocations(),
-    ]);
-    return results[0] as bool;
+    // Fire saved farm location & legacy storage migrations in the background (non-blocking)
+    unawaited(AgriculturalMonitoringService.instance.initSavedLocations());
+
+    // Only await the lightweight auth verification (~1ms) for instant time-to-first-screen
+    return AuthStorageService.instance.isLoggedIn();
   }
 
   @override

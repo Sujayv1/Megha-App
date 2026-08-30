@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/navigation/navigation_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../soil_analysis/services/soil_storage_service.dart';
 import '../../soil_analysis/widgets/glass_card.dart';
@@ -256,10 +257,7 @@ class _CropRecommendationScreenState extends State<CropRecommendationScreen> {
           const Spacer(),
           IconButton(
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MyFarmsScreen()),
-              );
+              SafeNavigator.push(context, const MyFarmsScreen());
             },
             tooltip: 'My Farms',
             icon: Container(

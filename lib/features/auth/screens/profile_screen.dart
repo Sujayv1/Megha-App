@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/navigation/navigation_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../soil_analysis/widgets/glass_card.dart';
 import '../services/auth_storage_service.dart';
@@ -33,150 +34,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showChangePasswordDialog() {
-    final currentPassCtrl = TextEditingController();
-    final newPassCtrl = TextEditingController();
-    final confirmPassCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
-        child: GlassCard(
-          padding: const EdgeInsets.all(22),
-          borderRadius: 26,
-          opacity: 0.98,
-          tint: Colors.white,
-          borderColor: AppColors.leafGreen.withValues(alpha: 0.4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: AppColors.leafGreen.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.lock_reset_rounded,
-                      color: AppColors.leafGreen,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Change Password',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: currentPassCtrl,
-                      obscureText: true,
-                      style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
-                      decoration: _buildInputDecoration('Current Password', Icons.lock_outline_rounded),
-                      validator: (v) => v == null || v.isEmpty ? 'Enter current password' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: newPassCtrl,
-                      obscureText: true,
-                      style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
-                      decoration: _buildInputDecoration('New Password', Icons.lock_open_rounded),
-                      validator: (v) => (v == null || v.length < 6) ? 'Password must be 6+ chars' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: confirmPassCtrl,
-                      obscureText: true,
-                      style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF0F172A), fontWeight: FontWeight.w700),
-                      decoration: _buildInputDecoration('Confirm Password', Icons.check_circle_outline_rounded),
-                      validator: (v) {
-                        if (v != newPassCtrl.text) return 'Passwords do not match';
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: Text('Cancel', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: const Color(0xFF64748B))),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.leafGreen,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-                    ),
-                    onPressed: () async {
-                      if (formKey.currentState!.validate()) {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString('farmsense_user_password', newPassCtrl.text);
-                        if (!mounted || !ctx.mounted) return;
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: AppColors.leafGreen,
-                            content: Text(
-                              'Password updated successfully!',
-                              style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    child: Text('Update Password', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w800)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w600),
-      prefixIcon: Icon(icon, size: 18, color: AppColors.leafGreen),
-      filled: true,
-      fillColor: const Color(0xFFF8FAFC),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: AppColors.leafGreen.withValues(alpha: 0.2)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: AppColors.leafGreen.withValues(alpha: 0.2)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.leafGreen, width: 1.5),
-      ),
+      builder: (ctx) => const _ChangePasswordDialog(),
     );
   }
 
@@ -223,15 +83,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Are you sure you want to sign out of Megha AI?',
+                'Are you sure you want to sign out of FarmSense?',
                 style: GoogleFonts.poppins(
-                  color: const Color(0xFF334155),
                   fontSize: 13.5,
-                  fontWeight: FontWeight.w500,
-                  height: 1.45,
+                  color: const Color(0xFF475569),
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -262,10 +121,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Navigator.pop(ctx);
                       await AuthStorageService.instance.logout();
                       if (!mounted) return;
-                      Navigator.pushAndRemoveUntil(
+                      await SafeNavigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
+                        const LoginScreen(),
                       );
                     },
                     child: Text(
@@ -613,6 +471,226 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog();
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPassCtrl = TextEditingController();
+  final _newPassCtrl = TextEditingController();
+  final _confirmPassCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _currentPassCtrl.dispose();
+    _newPassCtrl.dispose();
+    _confirmPassCtrl.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _buildInputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: GoogleFonts.poppins(
+        fontSize: 12,
+        color: const Color(0xFF64748B),
+        fontWeight: FontWeight.w600,
+      ),
+      prefixIcon: Icon(icon, size: 18, color: AppColors.leafGreen),
+      filled: true,
+      fillColor: const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: AppColors.leafGreen.withValues(alpha: 0.2),
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: AppColors.leafGreen.withValues(alpha: 0.2),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppColors.leafGreen, width: 1.5),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+      child: GlassCard(
+        padding: const EdgeInsets.all(22),
+        borderRadius: 26,
+        opacity: 0.98,
+        tint: Colors.white,
+        borderColor: AppColors.leafGreen.withValues(alpha: 0.4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: AppColors.leafGreen.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.lock_reset_rounded,
+                    color: AppColors.leafGreen,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Change Password',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _currentPassCtrl,
+                    obscureText: true,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'Current Password',
+                      Icons.lock_outline_rounded,
+                    ),
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Enter current password' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _newPassCtrl,
+                    obscureText: true,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'New Password',
+                      Icons.lock_open_rounded,
+                    ),
+                    validator: (v) =>
+                        (v == null || v.length < 6)
+                            ? 'Password must be 6+ chars'
+                            : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _confirmPassCtrl,
+                    obscureText: true,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'Confirm Password',
+                      Icons.check_circle_outline_rounded,
+                    ),
+                    validator: (v) {
+                      if (v != _newPassCtrl.text) return 'Passwords do not match';
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.leafGreen,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 11,
+                    ),
+                  ),
+                  onPressed: () async {
+                    if (_formKey.currentState!.validate()) {
+                      final nav = Navigator.of(context);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString(
+                        'farmsense_user_password',
+                        _newPassCtrl.text,
+                      );
+                      if (!mounted) return;
+                      nav.pop();
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          backgroundColor: AppColors.leafGreen,
+                          content: Text(
+                            'Password updated successfully!',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: Text(
+                    'Update Password',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
