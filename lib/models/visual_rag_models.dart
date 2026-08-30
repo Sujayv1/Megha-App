@@ -39,8 +39,8 @@ class DocumentCitation {
     return "${pct.toStringAsFixed(1)}%";
   }
 
-  /// Clean one-line citation string (e.g. "Rag_example.pdf (Page 6) • 94.5% match")
-  String get formattedCitation => "$displayName • $confidencePercentage match";
+  /// Clean one-line citation string (e.g. "Rag_example.pdf (Page 6)")
+  String get formattedCitation => displayName;
 }
 
 class VisualRagResponse {

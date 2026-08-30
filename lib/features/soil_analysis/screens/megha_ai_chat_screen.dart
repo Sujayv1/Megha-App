@@ -8,8 +8,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/hero_agent_widget.dart';
 import '../../../models/visual_rag_models.dart';
 import '../../../services/visual_rag_service.dart';
+import '../../../services/voice_assistant_service.dart';
 import '../services/megha_chat_storage_service.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/glass_surface.dart';
+import '../widgets/voice_mic_button.dart';
 
 class MeghaAiChatScreen extends StatefulWidget {
   const MeghaAiChatScreen({super.key});
@@ -22,6 +25,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _inputScrollController = ScrollController();
 
   String _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
   String _currentSessionTitle = 'New Chat';
@@ -39,8 +43,11 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
 
   @override
   void dispose() {
+    VoiceAssistantService.instance.stopSpeaking();
+    VoiceAssistantService.instance.stopListening();
     _textController.dispose();
     _scrollController.dispose();
+    _inputScrollController.dispose();
     super.dispose();
   }
 
@@ -364,165 +371,247 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     );
   }
 
-  // ── Chat History Sidebar Drawer ─────────────────────────────────────────────
+  // ── Chat History Sidebar Drawer (Fluid Liquid Glass) ───────────────────────
 
   Widget _buildSidebarDrawer(BuildContext context) {
     return Drawer(
-      backgroundColor: AppColors.bgBottom,
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Drawer Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.forum_rounded,
-                    color: AppColors.leafGreen,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Chat History',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.leafGreen,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: GlassSurface(
+        borderRadius: 0,
+        blur: 24,
+        opacity: 0.55,
+        tint: AppColors.cardCream,
+        borderWidth: 0,
+        padding: EdgeInsets.zero,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Drawer Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.leafGreen.withValues(alpha: 0.15),
+                        border: Border.all(
+                          color: AppColors.leafGreen.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.forum_rounded,
+                        color: AppColors.leafGreen,
+                        size: 18,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: AppColors.textMuted,
+                    const SizedBox(width: 10),
+                    Text(
+                      'Chat History',
+                      style: GoogleFonts.poppins(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                        size: 22,
+                        weight: 800,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Divider(color: Colors.white12, height: 1),
 
-            // Start New Chat Action Card
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  _startNewChat();
-                },
-                child: Container(
+              // Start New Chat Action Button (Fluid Glass)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                child: GlassCard(
+                  tint: AppColors.leafGreen,
+                  opacity: 0.90,
+                  borderRadius: 16,
+                  borderOpacity: 0.60,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                    horizontal: 14,
                     vertical: 12,
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.leafGreen.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppColors.leafGreen.withValues(alpha: 0.3),
-                    ),
-                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _startNewChat();
+                  },
                   child: Row(
                     children: [
                       const Icon(
                         Icons.add_circle_outline_rounded,
-                        color: AppColors.leafGreen,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Text(
                         'Start New Chat',
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.leafGreen,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
                         ),
+                      ),
+                      const Spacer(),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: Colors.white,
+                        size: 13,
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
 
-            // Saved Conversations List
-            Expanded(
-              child: _savedSessions.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No saved chats yet.\nAsk Megha AI a question!',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      itemCount: _savedSessions.length,
-                      itemBuilder: (context, index) {
-                        final session = _savedSessions[index];
-                        final isSelected = session.id == _currentSessionId;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.leafGreen.withValues(alpha: 0.2)
-                                  : Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.leafGreen
-                                    : Colors.white.withValues(alpha: 0.08),
+              // Saved Conversations List
+              Expanded(
+                child: _savedSessions.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 38,
+                              color: AppColors.textMuted.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'No saved chats yet.\nAsk Megha AI a question!',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                color: AppColors.textMuted,
+                                height: 1.4,
                               ),
                             ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        itemCount: _savedSessions.length,
+                        itemBuilder: (context, index) {
+                          final session = _savedSessions[index];
+                          final isSelected = session.id == _currentSessionId;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: GlassCard(
+                              tint: isSelected
+                                  ? AppColors.leafGreen
+                                  : AppColors.cardCream,
+                              opacity: isSelected ? 0.90 : 0.45,
+                              borderRadius: 16,
+                              borderOpacity: isSelected ? 0.60 : 0.22,
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
-                                vertical: 2,
-                              ),
-                              title: Text(
-                                session.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13.5,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? AppColors.leafGreen
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                              subtitle: Text(
-                                '${session.messages.length} messages • ${_formatTimeAgo(session.updatedAt)}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 10.5,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: Colors.redAccent,
-                                  size: 18,
-                                ),
-                                onPressed: () => _deleteSession(session.id),
+                                vertical: 10,
                               ),
                               onTap: () {
                                 Navigator.pop(context);
                                 _loadSession(session);
                               },
+                              child: Row(
+                                children: [
+                                  // Indicator / icon: White outside container, green icon for all items
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white,
+                                      border: isSelected
+                                          ? null
+                                          : Border.all(
+                                              color: AppColors.leafGreen
+                                                  .withValues(alpha: 0.25),
+                                              width: 1.0,
+                                            ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: isSelected ? 0.12 : 0.05,
+                                          ),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      isSelected
+                                          ? Icons.chat_rounded
+                                          : Icons.chat_bubble_outline_rounded,
+                                      size: 14,
+                                      color: AppColors.leafGreen,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          session.title,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13.3,
+                                            height: 1.3,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : AppColors.leafGreen,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          '${session.messages.length} messages • ${_formatTimeAgo(session.updatedAt)}',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11.0,
+                                            fontWeight: FontWeight.w500,
+                                            color: isSelected
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.85,
+                                                  )
+                                                : AppColors.leafGreen
+                                                    .withValues(alpha: 0.70),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 28,
+                                      minHeight: 28,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: Colors.redAccent,
+                                      size: 18,
+                                    ),
+                                    onPressed: () => _deleteSession(session.id),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -553,25 +642,26 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
 
   Widget _buildChatBubble(ChatMessageModel message, bool isUser) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
             // Megha AI Avatar: Dedicated ChatAvatarAgentWidget positioned close to the left edge
             const Padding(
-              padding: EdgeInsets.only(right: 5, top: 2),
-              child: ChatAvatarAgentWidget(width: 30, height: 30),
+              padding: EdgeInsets.only(right: 6, top: 2),
+              child: ChatAvatarAgentWidget(width: 28, height: 28),
             ),
           ],
           Flexible(
-            child: Padding(
-              padding: EdgeInsets.only(
-                left: isUser ? 26 : 0,
-                right: isUser ? 0 : 20, 
+            fit: FlexFit.loose,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isUser
+                    ? MediaQuery.of(context).size.width * 0.76
+                    : double.infinity,
               ),
               child: RepaintBoundary(
                 child: GlassCard(
@@ -579,11 +669,16 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                       ? AppColors.leafGreen.withValues(alpha: 0.16)
                       : AppColors.cardCream,
                   borderOpacity: 0.25,
-                  padding: const EdgeInsets.all(14),
+                  borderRadius: 18,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                    vertical: 9,
+                  ),
                   child: Column(
                     crossAxisAlignment: isUser
                         ? CrossAxisAlignment.end
                         : CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       MarkdownBody(
                         data: message.content,
@@ -595,7 +690,7 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                               p: GoogleFonts.poppins(
                                 fontSize: 13.5,
                                 color: AppColors.textPrimary,
-                                height: 1.5,
+                                height: 1.45,
                               ),
                               strong: GoogleFonts.poppins(
                                 fontSize: 13.5,
@@ -612,24 +707,24 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                                 right: 6,
                                 top: 2,
                               ),
-                              blockSpacing: 8,
+                              blockSpacing: 6,
                               h1: GoogleFonts.poppins(
-                                fontSize: 15.5,
+                                fontSize: 15.0,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.leafGreen,
                               ),
                               h2: GoogleFonts.poppins(
-                                fontSize: 14.5,
+                                fontSize: 14.0,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.leafGreen,
                               ),
                               h3: GoogleFonts.poppins(
-                                fontSize: 14.0,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.leafGreen,
                               ),
                               code: GoogleFonts.firaCode(
-                                fontSize: 12.5,
+                                fontSize: 12.0,
                                 color: AppColors.leafGreen,
                                 backgroundColor:
                                     AppColors.leafGreen.withValues(
@@ -664,25 +759,41 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
                       if (message.citations != null &&
                           message.citations!.isNotEmpty)
                         _buildCitationsWidget(message.citations!),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: isUser
-                            ? MainAxisAlignment.end
-                            : MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.leafGreen,
-                            ),
+                      const SizedBox(height: 4),
+                      if (isUser)
+                        Text(
+                          '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.leafGreen.withValues(alpha: 0.8),
                           ),
-                          if (!isUser)
-                            _buildCopyButton(message.content),
-                        ],
-                      ),
+                        )
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10.0,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.leafGreen,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildTtsSpeakerButton(message),
+                                const SizedBox(width: 6),
+                                _buildCopyButton(message.content),
+                              ],
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -692,9 +803,9 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
           if (isUser) ...[
             // Compact User Avatar Icon
             Padding(
-              padding: const EdgeInsets.only(left: 8, top: 4),
+              padding: const EdgeInsets.only(left: 6, top: 2),
               child: Container(
-                padding: const EdgeInsets.all(5.5),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppColors.leafGreen.withValues(alpha: 0.15),
@@ -713,6 +824,56 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
         ],
       ),
     ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.1, end: 0.0);
+  }
+
+  // ── TTS Voice Playback Button ───────────────────────────────────────────────
+
+  Widget _buildTtsSpeakerButton(ChatMessageModel message) {
+    final msgId =
+        '${message.timestamp.millisecondsSinceEpoch}_${message.content.hashCode}';
+    return ValueListenableBuilder<String?>(
+      valueListenable: VoiceAssistantService.instance.currentlySpeakingId,
+      builder: (context, speakingId, _) {
+        final isSpeakingThis = speakingId == msgId;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            VoiceAssistantService.instance.speak(
+              message.content,
+              messageId: msgId,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(2.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isSpeakingThis
+                      ? Icons.stop_circle_rounded
+                      : Icons.volume_up_rounded,
+                  size: 13.5,
+                  color: isSpeakingThis
+                      ? Colors.redAccent
+                      : AppColors.leafGreen.withValues(alpha: 0.85),
+                ),
+                const SizedBox(width: 3.5),
+                Text(
+                  isSpeakingThis ? 'Stop' : 'Listen',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: isSpeakingThis
+                        ? Colors.redAccent
+                        : AppColors.leafGreen.withValues(alpha: 0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ── Copy Answer Button ───────────────────────────────────────────────────────
@@ -926,50 +1087,112 @@ class _MeghaAiChatScreenState extends State<MeghaAiChatScreen> {
     ).animate().fadeIn(duration: 200.ms);
   }
 
-  // ── Input Bar ──────────────────────────────────────────────────────────────
+  // ── Input Bar with Multi-Line Auto-Expansion & Left-Side Voice Mic Button ──
+
+  void _scrollInputToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_inputScrollController.hasClients) {
+        _inputScrollController.animateTo(
+          _inputScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
 
   Widget _buildInputBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-      child: RepaintBoundary(
-        child: GlassCard(
-          tint: AppColors.cardCream,
-          borderOpacity: 0.25,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13.5,
-                    color: AppColors.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Ask Megha AI about crops, soil, mandi...',
-                    hintStyle: GoogleFonts.poppins(
-                      fontSize: 12.5,
-                      color: AppColors.textMuted,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  onSubmitted: (_) => _sendMessage(),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.send_rounded,
-                  color: AppColors.leafGreen,
-                ),
-                onPressed: _sendMessage,
-              ),
-            ],
+      padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left outside mic button with ripple pulse animation
+          VoiceMicButton(
+            textController: _textController,
+            onSpeechCompleted: () {
+              if (mounted) {
+                _textController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _textController.text.length),
+                );
+                _scrollInputToBottom();
+              }
+            },
           ),
-        ),
+          const SizedBox(width: 8),
+          // Main glass auto-expanding text field container (ChatGPT style)
+          Expanded(
+            child: RepaintBoundary(
+              child: GlassCard(
+                tint: AppColors.cardCream,
+                borderRadius: 20,
+                borderOpacity: 0.25,
+                padding: const EdgeInsets.fromLTRB(12, 0, 4, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: 34,
+                          maxHeight: 120,
+                        ),
+                        child: Scrollbar(
+                          controller: _inputScrollController,
+                          thumbVisibility: true,
+                          radius: const Radius.circular(4),
+                          thickness: 3.5,
+                          child: TextField(
+                            controller: _textController,
+                            scrollController: _inputScrollController,
+                            textAlignVertical: TextAlignVertical.center,
+                            minLines: 1,
+                            maxLines: null,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            scrollPhysics: const BouncingScrollPhysics(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 12.5,
+                              color: AppColors.textPrimary,
+                              height: 1.3,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Talk to Megha AI',
+                              hintStyle: GoogleFonts.poppins(
+                                fontSize: 12.0,
+                                color: AppColors.textMuted,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 2,
+                                vertical: 8,
+                              ),
+                            ),
+                            onChanged: (_) => _scrollInputToBottom(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      icon: const Icon(
+                        Icons.send_rounded,
+                        color: AppColors.leafGreen,
+                        size: 18.5,
+                      ),
+                      onPressed: _sendMessage,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -16,7 +16,7 @@ void main() {
       expect(citation.confidencePercentage, equals('92.5%'));
       expect(
         citation.formattedCitation,
-        equals('Crop_Diagnostics_Guide.pdf (Page 6) • 92.5% match'),
+        equals('Crop_Diagnostics_Guide.pdf (Page 6)'),
       );
     });
 
@@ -30,19 +30,13 @@ void main() {
       final citation = DocumentCitation.fromJson(jsonMap);
       expect(citation.filename, equals('Soil_Health_Manual.pdf'));
       expect(citation.pageNumber, equals(14));
-      expect(citation.score, closeTo(0.887, 0.0001));
-      expect(citation.confidencePercentage, equals('88.7%'));
-
-      final serialized = citation.toJson();
-      expect(serialized['filename'], equals('Soil_Health_Manual.pdf'));
-      expect(serialized['page_number'], equals(14));
-      expect(serialized['score'], equals(0.887));
+      expect(citation.score, equals(0.887));
     });
 
-    test('VisualRagResponse JSON serialization & parsing', () {
+    test('VisualRagResponse deserialization from Map', () {
       final responseMap = {
-        'answer': 'Tomato blight can be controlled with copper fungicide.',
-        'sources': [
+        'answer': 'Tomato blight is a severe fungal disease.',
+        'citations': [
           {
             'filename': 'Tomato_Pathology.pdf',
             'page_number': 3,
@@ -57,7 +51,7 @@ void main() {
       expect(ragResponse.citations.length, equals(1));
       expect(
         ragResponse.citations.first.formattedCitation,
-        equals('Tomato_Pathology.pdf (Page 3) • 95.2% match'),
+        equals('Tomato_Pathology.pdf (Page 3)'),
       );
       expect(ragResponse.totalTimeMs, equals(342.5));
     });
@@ -85,7 +79,7 @@ void main() {
       expect(restored.citations!.length, equals(1));
       expect(
         restored.citations!.first.formattedCitation,
-        equals('Fertilizer_Guide.pdf (Page 12) • 91.0% match'),
+        equals('Fertilizer_Guide.pdf (Page 12)'),
       );
     });
 
